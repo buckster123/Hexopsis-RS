@@ -7,9 +7,10 @@ use std::time::{Duration, Instant};
 
 use crate::compiler::{compile_view_contract, CompileOpts};
 use crate::error::{error_type, Error};
+use crate::export::{inspect_glb, ExportClass};
 use crate::gates::score_g3_g4;
 use crate::hash::sha256_bytes;
-use crate::mock_glb::{emit_mock_glb_seeded, has_vertex_color};
+use crate::mock_glb::emit_mock_glb_seeded;
 use crate::orbit::decode_png;
 use crate::planner::plan;
 use crate::remote::RemoteOutcome;
@@ -22,9 +23,9 @@ use crate::system_check::{estimate as estimate_job, probe_from_env};
 use crate::t2i::{estimate_orbit, synthesize_orbit, view_count, MockT2i, T2iProvider};
 use crate::t2i_imaginarium::Imaginarium;
 use crate::types::{
-    ArtifactKind, Estimate, JobStatus, JobSubmit, Manifest, ManifestHashes, MaterialMode, MeshJob,
-    PlaneId, ProbeSnapshot, SpendPolicy, Synthesis, T2iProviderId, Timings, WaitResult,
-    MANIFEST_SCHEMA, WAIT_MAX_S, WAIT_MIN_S,
+    ArtifactKind, Estimate, JobStatus, JobSubmit, Manifest, ManifestHashes, MeshJob, PlaneId,
+    ProbeSnapshot, SpendPolicy, Synthesis, T2iProviderId, Timings, WaitResult, MANIFEST_SCHEMA,
+    WAIT_MAX_S, WAIT_MIN_S,
 };
 
 const MAX_UPLOAD_BYTES: u64 = 32 * 1024 * 1024;
@@ -707,27 +708,39 @@ impl App {
         glb: &[u8],
         meta: FinishGlb<'_>,
     ) -> Result<MeshJob, Error> {
-        if !has_vertex_color(glb) {
+        let report = match inspect_glb(glb) {
+            Ok(r) => r,
+            Err(e) => return self.fail(job, e),
+        };
+        if report.class == ExportClass::Missing {
             return self.fail(
                 job,
                 Error::new(
                     error_type::EXPORT_MATERIALS_MISSING,
-                    "GLB missing COLOR_0 and has no PBR textures",
+                    "GLB has default-only factors, no COLOR_0, and no textures",
                 ),
             );
         }
+        let mockish = meta.plane == PlaneId::LocalMock || meta.engine == "mock";
+        let pbr = report.class == ExportClass::UvAtlas && !mockish;
+        let status = if pbr {
+            JobStatus::Succeeded
+        } else {
+            JobStatus::Degraded
+        };
         let hash = sha256_bytes(glb);
         let glb_path = self.store.write_artifact(&job.id, "artifact.glb", glb)?;
         self.store
             .write_artifact(&job.id, "artifact.glb.sha256", hash.as_bytes())?;
 
-        job.status = JobStatus::Degraded;
+        job.status = status;
         job.pct = 100;
         job.stage = Some("export".into());
-        if !job
-            .degrades
-            .iter()
-            .any(|d| d == error_type::EXPORT_MATERIAL_MODE)
+        if !pbr
+            && !job
+                .degrades
+                .iter()
+                .any(|d| d == error_type::EXPORT_MATERIAL_MODE)
         {
             job.degrades.push(error_type::EXPORT_MATERIAL_MODE.into());
         }
@@ -743,12 +756,12 @@ impl App {
         let manifest = Manifest {
             schema: MANIFEST_SCHEMA.into(),
             job_id: job.id.clone(),
-            ok: false,
-            status: JobStatus::Degraded,
+            ok: status == JobStatus::Succeeded,
+            status,
             plane: Some(meta.plane),
             engine: Some(meta.engine.into()),
             disclaimer: meta.disclaimer.map(str::to_string),
-            material_mode: Some(MaterialMode::VertexColor),
+            material_mode: report.material_mode,
             hashes: ManifestHashes {
                 glb: Some(hash),
                 job: None,
@@ -927,8 +940,18 @@ impl App {
         job_id: &str,
         kind: ArtifactKind,
     ) -> Result<(std::path::PathBuf, String, u64, &'static str), Error> {
+        self.artifact_view(job_id, kind, None)
+    }
+
+    pub fn artifact_view(
+        &self,
+        job_id: &str,
+        kind: ArtifactKind,
+        view_id: Option<&str>,
+    ) -> Result<(std::path::PathBuf, String, u64, &'static str), Error> {
         let job = self.status(job_id)?;
-        if !job.status.has_artifact() && kind != ArtifactKind::Log {
+        let needs_terminal = matches!(kind, ArtifactKind::Glb | ArtifactKind::Manifest);
+        if needs_terminal && !job.status.has_artifact() {
             return Err(Error::new(
                 error_type::EXPORT_NOT_READY,
                 format!(
@@ -937,18 +960,31 @@ impl App {
                 ),
             ));
         }
-        let name = match kind {
-            ArtifactKind::Glb => "artifact.glb",
-            ArtifactKind::Manifest => "manifest.json",
-            ArtifactKind::Contract => "contract.json",
-            ArtifactKind::View => "views",
-            ArtifactKind::Log => "log.stderr.txt",
+        let path = match kind {
+            ArtifactKind::Glb => self.store.artifact_path(job_id, "artifact.glb"),
+            ArtifactKind::Manifest => self.store.artifact_path(job_id, "manifest.json"),
+            ArtifactKind::Contract => self.store.artifact_path(job_id, "contract.json"),
+            ArtifactKind::Log => self.store.artifact_path(job_id, "log.stderr.txt"),
+            ArtifactKind::View => {
+                if let Some(id) = view_id.filter(|s| !s.is_empty()) {
+                    if id.contains('/') || id.contains("..") {
+                        return Err(Error::new(
+                            error_type::SPEC_REJECTED,
+                            "view_id must be a camera id",
+                        ));
+                    }
+                    self.store.artifact_path(job_id, &format!("views/{id}.png"))
+                } else if let Some(p) = job.artifacts.views.first() {
+                    std::path::PathBuf::from(p)
+                } else {
+                    self.store.artifact_path(job_id, "views/hero.png")
+                }
+            }
         };
-        let path = self.store.artifact_path(job_id, name);
         if !path.is_file() {
             return Err(Error::new(
                 error_type::EXPORT_NOT_READY,
-                format!("{name} is not on disk"),
+                format!("{} is not on disk", path.display()),
             ));
         }
         let bytes = std::fs::read(&path)?;
@@ -1040,7 +1076,7 @@ pub fn compile_prompt(prompt: &str, spec: &JobSubmit) -> Result<crate::ViewContr
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::types::{ComputeMode, JobSubmit, PlaneId, ProbeSnapshot, Quality};
+    use crate::types::{ComputeMode, JobSubmit, MaterialMode, PlaneId, ProbeSnapshot, Quality};
 
     #[test]
     fn text_prompt_ungated_mock_degraded() {

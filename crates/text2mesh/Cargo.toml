@@ -10,6 +10,7 @@ description = "Tessera-RS core — MeshJob, planner, mock plane, store"
 async-trait.workspace = true
 base64.workspace = true
 dirs.workspace = true
+gltf.workspace = true
 reqwest.workspace = true
 hex.workspace = true
 image.workspace = true

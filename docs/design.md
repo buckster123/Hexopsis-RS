@@ -2,7 +2,7 @@
 
 | Field | Value |
 |---|---|
-| **Status** | v0.4 — implement from this (S10: Meshy/Tripo remotes) |
+| **Status** | v0.4 — implement from this (S11: export honesty + groutbench WebUI) |
 | **Date** | 2026-08-19 |
 | **Wins over** | informal chat, research notes |
 | **Loses to** | CHARTER D1–D30 |
@@ -841,7 +841,7 @@ Default bind `127.0.0.1:8796` (`TEXT2MESH_BIND`). Non-loopback requires `Authori
 | GET | `/v1/jobs/{id}/artifact` | same | `?kind=glb\|manifest\|contract\|view&view_id=` |
 | GET | `/v1/jobs/{id}/events` | same | optional SSE `text/event-stream` |
 | GET | `/v1/openapi.json` | no on loopback | generated |
-| GET | `/` | loopback | WebUI if `webui` feature |
+| GET | `/` | loopback | HTMX studio (always on in `-api`; off-loopback 404) |
 
 SSE events:
 
@@ -1273,7 +1273,7 @@ Config `~/.config/text2mesh/config.toml` is a 1:1 of the non-secret env keys abo
 | `preview-candle` | off | candle-core CPU (tiny preview only) |
 | `cuda` / `metal` / `vulkan` | off | still probed |
 | `gate-clip` | off | OpenCLIP |
-| `webui` | off | HTMX assets |
+| `webui` | **on** (S11) | HTMX studio in `-api` (`GET /`) |
 
 **Horizon, do not schedule in v1 `Cargo.toml`:** `quality-candle`, `quality-ggml`. Adding them needs CHARTER D28 amendment.
 

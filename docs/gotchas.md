@@ -23,6 +23,10 @@
 
 - **Missing vendor key never POSTs.** Empty/absent `MESHY_API_KEY` / `TRIPO_API_KEY` is `not_configured` before any HTTP. 401 is only “key present but rejected.” 402 → `spend.provider_402`. 429 → `rate_limit` + `Retry-After`. Remote poll expiry is `waiting_upstream`, not local `failed`.
 
+- **Export honesty is the `gltf` crate.** Unparseable → `engine.crash`. Default-only factors + no COLOR_0 + no textures → `failed` `export.materials_missing`. Vertex colour / factors-only → `degraded`. True UV/PBR may `succeeded`. Mock is never succeeded.
+
+- **WebUI is loopback-only.** `GET /` is the groutbench. Degraded is amber, never a green tick. Download on mock is “Download degraded GLB”. Off-loopback the studio 404s; `/v1` still uses the bearer.
+
 - **Appendix B is not a clone list.** Implementers do not follow PRD Appendix B GitHub URLs.
 
 - **Hunyuan never auto.** Even with D19 gates, auto prefers colony/tripo/meshy/local.

@@ -2,15 +2,20 @@
 
 use std::sync::Arc;
 
-use axum::extract::{Path, Query, State};
-use axum::http::{header, HeaderMap, StatusCode};
+use axum::extract::{Multipart, Path, Query, State};
+use axum::http::{header, HeaderMap, HeaderValue, StatusCode};
 use axum::response::{IntoResponse, Response};
 use axum::routing::{get, post};
 use axum::{Json, Router};
 use serde::Deserialize;
 use serde_json::{json, Value};
 use text2mesh::error::error_type;
-use text2mesh::{load_xdg_env, App, ArtifactKind, Config, Error, JobSubmit, VERSION};
+use text2mesh::{
+    load_xdg_env, App, ArtifactKind, ComputeMode, Config, Error, JobSubmit, PlaneId, Quality,
+    VERSION,
+};
+
+mod ui;
 
 #[derive(Clone)]
 pub struct ApiState {
@@ -20,6 +25,15 @@ pub struct ApiState {
 
 pub fn router(state: ApiState) -> Router {
     Router::new()
+        .route("/", get(ui_home))
+        .route("/jobs/{id}", get(ui_job_page))
+        .route("/ui/system-check", get(ui_system_check))
+        .route("/ui/estimate", post(ui_estimate))
+        .route("/ui/jobs", post(ui_create_job))
+        .route("/ui/jobs/{id}", get(ui_job_fragment))
+        .route("/ui/jobs/{id}/confirm", post(ui_confirm))
+        .route("/ui/jobs/{id}/cancel", post(ui_cancel))
+        .route("/static/htmx.min.js", get(htmx_js))
         .route("/v1/health", get(health))
         .route("/v1/system-check", get(system_check))
         .route("/v1/estimate", post(estimate))
@@ -183,7 +197,6 @@ async fn get_artifact(
     if let Some(resp) = deny_auth(&headers, &state) {
         return resp;
     }
-    let _ = q.view_id;
     let kind = q.kind.as_deref().unwrap_or("glb");
     let kind = match ArtifactKind::parse(kind) {
         Some(k) => k,
@@ -194,13 +207,181 @@ async fn get_artifact(
             ));
         }
     };
-    match state.app.artifact(&id, kind) {
+    match state.app.artifact_view(&id, kind, q.view_id.as_deref()) {
         Ok((path, _sha, _n, media)) => match std::fs::read(&path) {
             Ok(bytes) => (StatusCode::OK, [(header::CONTENT_TYPE, media)], bytes).into_response(),
             Err(e) => error_response(&Error::from(e)),
         },
         Err(e) => error_response(&e),
     }
+}
+
+fn ui_forbidden(state: &ApiState) -> Option<Response> {
+    if state.token.is_some() {
+        Some((StatusCode::NOT_FOUND, "WebUI is loopback-only").into_response())
+    } else {
+        None
+    }
+}
+
+async fn ui_home(State(state): State<ApiState>) -> Response {
+    if let Some(r) = ui_forbidden(&state) {
+        return r;
+    }
+    ui::page(&state.app, None).into_response()
+}
+
+async fn ui_job_page(State(state): State<ApiState>, Path(id): Path<String>) -> Response {
+    if let Some(r) = ui_forbidden(&state) {
+        return r;
+    }
+    let job = state.app.status(&id).ok();
+    ui::page(&state.app, job.as_ref()).into_response()
+}
+
+async fn ui_system_check(State(state): State<ApiState>) -> Response {
+    if let Some(r) = ui_forbidden(&state) {
+        return r;
+    }
+    ui::probe_inner(&state.app).into_response()
+}
+
+async fn ui_estimate(State(state): State<ApiState>, mut multipart: Multipart) -> Response {
+    if let Some(r) = ui_forbidden(&state) {
+        return r;
+    }
+    match form_to_submit(&state.app, &mut multipart).await {
+        Ok(spec) => {
+            let est = state.app.estimate(&spec);
+            ui::estimate_markup(&est).into_response()
+        }
+        Err(e) => ui_err(&e),
+    }
+}
+
+async fn ui_create_job(State(state): State<ApiState>, mut multipart: Multipart) -> Response {
+    if let Some(r) = ui_forbidden(&state) {
+        return r;
+    }
+    match form_to_submit(&state.app, &mut multipart).await {
+        Ok(spec) => match state.app.submit(spec) {
+            Ok(job) => {
+                let mut resp = ui::job_card(Some(&job)).into_response();
+                if let Ok(v) = HeaderValue::from_str(&format!("/jobs/{}", job.id)) {
+                    resp.headers_mut().insert("HX-Push-Url", v);
+                }
+                resp
+            }
+            Err(e) => ui_err(&e),
+        },
+        Err(e) => ui_err(&e),
+    }
+}
+
+async fn ui_job_fragment(State(state): State<ApiState>, Path(id): Path<String>) -> Response {
+    if let Some(r) = ui_forbidden(&state) {
+        return r;
+    }
+    match state.app.status(&id) {
+        Ok(job) => ui::job_card(Some(&job)).into_response(),
+        Err(e) => ui_err(&e),
+    }
+}
+
+async fn ui_confirm(State(state): State<ApiState>, Path(id): Path<String>) -> Response {
+    if let Some(r) = ui_forbidden(&state) {
+        return r;
+    }
+    match state.app.confirm(&id) {
+        Ok(job) => ui::job_card(Some(&job)).into_response(),
+        Err(e) => ui_err(&e),
+    }
+}
+
+async fn ui_cancel(State(state): State<ApiState>, Path(id): Path<String>) -> Response {
+    if let Some(r) = ui_forbidden(&state) {
+        return r;
+    }
+    match state.app.cancel(&id) {
+        Ok(job) => ui::job_card(Some(&job)).into_response(),
+        Err(e) => ui_err(&e),
+    }
+}
+
+async fn htmx_js() -> Response {
+    (
+        [(header::CONTENT_TYPE, "application/javascript")],
+        include_bytes!("../static/htmx.min.js").as_slice(),
+    )
+        .into_response()
+}
+
+fn ui_err(err: &Error) -> Response {
+    let body = format!("{}: {}", err.error_type, err.message);
+    (StatusCode::BAD_REQUEST, body).into_response()
+}
+
+async fn form_to_submit(app: &App, multipart: &mut Multipart) -> Result<JobSubmit, Error> {
+    let mut spec = JobSubmit::default();
+    let mut saw_image = false;
+    while let Some(field) = multipart
+        .next_field()
+        .await
+        .map_err(|e| Error::new(error_type::SPEC_REJECTED, e.to_string()))?
+    {
+        let name = field.name().unwrap_or("").to_string();
+        match name.as_str() {
+            "prompt" => {
+                let t = field
+                    .text()
+                    .await
+                    .map_err(|e| Error::new(error_type::SPEC_REJECTED, e.to_string()))?;
+                if !t.trim().is_empty() {
+                    spec.prompt = Some(t);
+                }
+            }
+            "image" => {
+                let bytes = field
+                    .bytes()
+                    .await
+                    .map_err(|e| Error::new(error_type::SPEC_REJECTED, e.to_string()))?;
+                if !bytes.is_empty() {
+                    let dir = app.store.root().join("uploads");
+                    std::fs::create_dir_all(&dir)?;
+                    let path = dir.join(format!("{}.bin", ulid::Ulid::new()));
+                    std::fs::write(&path, &bytes)?;
+                    spec.image_path = Some(path.to_string_lossy().into_owned());
+                    saw_image = true;
+                }
+            }
+            "quality" => {
+                let t = field.text().await.unwrap_or_default();
+                spec.quality = match t.as_str() {
+                    "preview" => Quality::Preview,
+                    "high" => Quality::High,
+                    "ultra" => Quality::Ultra,
+                    _ => Quality::Standard,
+                };
+            }
+            "compute" => {
+                let t = field.text().await.unwrap_or_default();
+                spec.compute = match t.as_str() {
+                    "local" => ComputeMode::Local,
+                    "remote" => ComputeMode::Remote,
+                    _ => ComputeMode::Auto,
+                };
+            }
+            "provider" => {
+                let t = field.text().await.unwrap_or_default();
+                spec.provider = PlaneId::parse(&t);
+            }
+            "allow_spend" => spec.allow_spend = true,
+            "allow_native_text" => spec.allow_native_text = true,
+            _ => {}
+        }
+    }
+    let _ = saw_image;
+    Ok(spec)
 }
 
 async fn openapi() -> Json<Value> {
@@ -393,6 +574,88 @@ mod tests {
         let v = body_json(res).await;
         assert_eq!(v["ok"], true);
         assert_eq!(v["job"]["status"], "running");
+    }
+
+    #[tokio::test]
+    async fn webui_home_is_tessera_not_saas() {
+        let state = ApiState {
+            app: Arc::new(App::for_test(true)),
+            token: None,
+        };
+        let res = router(state)
+            .oneshot(Request::builder().uri("/").body(Body::empty()).unwrap())
+            .await
+            .unwrap();
+        assert_eq!(res.status(), StatusCode::OK);
+        let bytes = axum::body::to_bytes(res.into_body(), 1024 * 1024)
+            .await
+            .unwrap();
+        let html = String::from_utf8(bytes.to_vec()).unwrap();
+        assert!(html.contains("Tessera"));
+        assert!(html.contains("#e0a04a"), "amber token missing");
+        assert!(!html.contains("Success!"));
+        assert!(!html.contains("confetti"));
+    }
+
+    #[tokio::test]
+    async fn webui_probe_never_uses_ok_for_ready() {
+        let state = ApiState {
+            app: Arc::new(App::for_test(false)),
+            token: None,
+        };
+        let res = router(state)
+            .oneshot(
+                Request::builder()
+                    .uri("/ui/system-check")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        let bytes = axum::body::to_bytes(res.into_body(), 64 * 1024)
+            .await
+            .unwrap();
+        let html = String::from_utf8(bytes.to_vec()).unwrap();
+        assert!(html.contains("Not ready") || html.contains("Ready"));
+        assert!(html.contains("would_pick"));
+        assert!(!html.contains("ok="));
+    }
+
+    #[tokio::test]
+    async fn webui_degraded_banner_not_green() {
+        let app = App::for_test(true);
+        let (_tmp, png) = png_path();
+        let job = app
+            .submit(text2mesh::JobSubmit {
+                image_path: Some(png.to_string_lossy().into_owned()),
+                compute: ComputeMode::Local,
+                provider: Some(PlaneId::LocalMock),
+                ..text2mesh::JobSubmit::default()
+            })
+            .unwrap();
+        assert_eq!(job.status, JobStatus::Degraded);
+        let id = job.id.clone();
+        let state = ApiState {
+            app: Arc::new(app),
+            token: None,
+        };
+        let res = router(state)
+            .oneshot(
+                Request::builder()
+                    .uri(format!("/ui/jobs/{id}"))
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        let bytes = axum::body::to_bytes(res.into_body(), 1024 * 1024)
+            .await
+            .unwrap();
+        let html = String::from_utf8(bytes.to_vec()).unwrap();
+        assert!(html.contains("Degraded"));
+        assert!(html.contains("Download degraded GLB"));
+        assert!(!html.contains("Download GLB</a>")); // exact succeeded label
+        assert!(!html.contains("Success!"));
     }
 
     #[tokio::test]
