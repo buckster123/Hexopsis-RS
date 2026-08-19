@@ -69,13 +69,12 @@ pub fn build_system_check(probe: &ProbeSnapshot, spend: &SpendPolicy) -> SystemC
         product: PRODUCT.into(),
         version: VERSION.into(),
         features: FeatureReport {
-            compiled: vec!["remote-http".into()],
+            compiled: vec!["remote-http".into(), "webui".into()],
             not_compiled: vec![
                 "sidecar".into(),
                 "preview-onnx".into(),
                 "preview-candle".into(),
                 "gate-clip".into(),
-                "webui".into(),
             ],
             horizon_unscheduled: vec!["quality-candle".into(), "quality-ggml".into()],
         },

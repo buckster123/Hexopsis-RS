@@ -117,6 +117,80 @@ pub fn emit_mock_glb_seeded(input: &[u8], seed: u64) -> Vec<u8> {
     out
 }
 
+/// Parser-valid GLB with default metallic-roughness only — no COLOR_0, no textures.
+/// Must never be `succeeded` (D9 `export.materials_missing`).
+pub fn emit_grey_glb() -> Vec<u8> {
+    let positions: [[f32; 3]; 4] = [
+        [1.0, 1.0, 1.0],
+        [1.0, -1.0, -1.0],
+        [-1.0, 1.0, -1.0],
+        [-1.0, -1.0, 1.0],
+    ];
+    let indices: [u16; 12] = [0, 1, 2, 0, 2, 3, 0, 3, 1, 1, 3, 2];
+    let mut bin = Vec::new();
+    for p in &positions {
+        for x in p {
+            bin.extend_from_slice(&x.to_le_bytes());
+        }
+    }
+    for i in &indices {
+        bin.extend_from_slice(&i.to_le_bytes());
+    }
+    while !bin.len().is_multiple_of(4) {
+        bin.push(0);
+    }
+    let json = json!({
+        "asset": { "version": "2.0", "generator": "text2mesh-grey" },
+        "scene": 0,
+        "scenes": [{ "nodes": [0] }],
+        "nodes": [{ "mesh": 0 }],
+        "meshes": [{
+            "primitives": [{
+                "attributes": { "POSITION": 0 },
+                "indices": 1,
+                "mode": 4
+            }]
+        }],
+        "accessors": [
+            {
+                "bufferView": 0,
+                "componentType": 5126,
+                "count": 4,
+                "type": "VEC3",
+                "min": [-1.0, -1.0, -1.0],
+                "max": [1.0, 1.0, 1.0]
+            },
+            {
+                "bufferView": 1,
+                "componentType": 5123,
+                "count": 12,
+                "type": "SCALAR"
+            }
+        ],
+        "bufferViews": [
+            { "buffer": 0, "byteOffset": 0, "byteLength": 48, "target": 34962 },
+            { "buffer": 0, "byteOffset": 48, "byteLength": 24, "target": 34963 }
+        ],
+        "buffers": [{ "byteLength": bin.len() }]
+    });
+    let mut json_bytes = serde_json::to_vec(&json).unwrap_or_else(|_| b"{}".to_vec());
+    while !json_bytes.len().is_multiple_of(4) {
+        json_bytes.push(b' ');
+    }
+    let total = 12 + 8 + json_bytes.len() + 8 + bin.len();
+    let mut out = Vec::with_capacity(total);
+    write_u32(&mut out, GLB_MAGIC);
+    write_u32(&mut out, GLB_VERSION);
+    write_u32(&mut out, total as u32);
+    write_u32(&mut out, json_bytes.len() as u32);
+    write_u32(&mut out, CHUNK_JSON);
+    out.extend_from_slice(&json_bytes);
+    write_u32(&mut out, bin.len() as u32);
+    write_u32(&mut out, CHUNK_BIN);
+    out.extend_from_slice(&bin);
+    out
+}
+
 fn write_u32(buf: &mut Vec<u8>, v: u32) {
     buf.extend_from_slice(&v.to_le_bytes());
 }
@@ -183,7 +257,12 @@ mod tests {
 
     #[test]
     fn grey_default_material_not_succeeded() {
-        // Mock always has COLOR_0 variation; it is degraded, never a grey success.
         assert!(has_vertex_color(&emit_mock_glb()));
+        assert!(!has_vertex_color(&emit_grey_glb()));
+        let json = glb_json_chunk(&emit_grey_glb()).unwrap();
+        assert_eq!(json["asset"]["version"], "2.0");
+        assert!(json
+            .pointer("/meshes/0/primitives/0/attributes/COLOR_0")
+            .is_none());
     }
 }
