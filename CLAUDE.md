@@ -21,8 +21,8 @@ Clean-room: do **not** open AI_trellis2cpp / TRELLIS / Hunyuan / TripoSR source.
 A Rust product that turns a still image or a text prompt into a portable glTF 2.0 GLB.
 The text path is **Lattice Router + typed View Contract + Hero-Orbit**, then the same
 image-to-mesh plane. Dual compute: `LocalPlane` + `RemotePlane`; `auto` is a pure planner.
-v1 quality is a user sidecar (`meshplane/1`) or a remote (Meshy/Tripo/colony), not an
-in-process DiT.
+v1 (S0–S12) is **implemented** on `main` (`docs/STATUS.md`). Quality is a user sidecar
+(`meshplane/1`) or a remote (Meshy/Tripo/colony), not an in-process DiT.
 
 ```
 crates/
@@ -119,6 +119,8 @@ Project invariants live in **`docs/gotchas.md`**. Grep it before modifying a sub
 
 | File | Load when |
 |------|-----------|
+| `docs/STATUS.md` | v1 close-out / field truth |
+| `docs/USER.md` | How to run the product |
 | `docs/CHARTER.md` | Binding D1–Dn |
 | `docs/design.md` | Wire / job / MCP / HTTP |
 | `docs/prd.md` | Product intent |

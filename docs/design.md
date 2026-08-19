@@ -2,7 +2,7 @@
 
 | Field | Value |
 |---|---|
-| **Status** | v0.4 — implement from this (S11: export honesty + groutbench WebUI) |
+| **Status** | v0.4 — **implemented** (S0–S12 on `main`, 2026-08-19). Additive changes only; schema bump needs a CHARTER amendment. |
 | **Date** | 2026-08-19 |
 | **Wins over** | informal chat, research notes |
 | **Loses to** | CHARTER D1–D30 |

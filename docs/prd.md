@@ -2,7 +2,7 @@
 
 | Field | Value |
 |---|---|
-| **Status** | Draft v0.4 |
+| **Status** | Draft v0.4 — **v1 (S0–S12) implemented 2026-08-19** on `main`. This file stays the product contract. |
 | **Date** | 2026-08-19 |
 | **Working name** | `text2mesh` (repo, crate prefix, binaries until D1 sweep PR) |
 | **Garden name** | **Tessera-RS** (OQ-1 locked 2026-08-19) |
@@ -12,7 +12,7 @@
 | **Cerebro product id** | `TESSERA` (OQ-1; tags `project:text2mesh`) |
 | **Contract twin** | `docs/design.md` (normative wire) · `docs/CHARTER.md` (binding D*) |
 
-This document is the **product** contract. `docs/design.md` is the **implementation** contract. CHARTER D* win on conflict. Code does not exist yet; nothing in this file is a port.
+This document is the **product** contract. `docs/design.md` is the **implementation** contract. CHARTER D* win on conflict. **v1 (S0–S12) is on `main` as of 2026-08-19** (`docs/STATUS.md`). Nothing in this file is a port.
 
 ---
 

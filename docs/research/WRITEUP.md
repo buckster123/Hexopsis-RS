@@ -1,5 +1,7 @@
 # text2mesh PRD write-up — 2026-08-19 (v0.4)
 
+**Implemented.** v1 S0–S12 is on `main` (2026-08-19). This note is the PRD-write provenance, not the runbook — see `docs/STATUS.md` and `docs/USER.md`.
+
 **v0.4 (2026-08-19).** André locked house OQ-1..7 in place (no pack rewrite): (1) garden name **Tessera-RS**, crates/binaries stay `text2mesh` until a crates.io + trademark sweep PR, Cerebro id **TESSERA** / tags `project:text2mesh`; (2) sidecar v1 + independent Rust from papers as horizon; (3) hybrid runtime; (4) extras-allowed — GLB+PBR still defines success; Gaussian/NeRF optional extra artefacts if an engine emits them, not a second metric, not first-class DCC; (5) 6 cameras `cardinal4_hero_top`; (6) bind `127.0.0.1:8796`; (7) defer print wrap. OQ-8/9/10 remain open. CHARTER D1/D9/D16/D21/D27/D28 amended; D21 stays. Wait clocks, gates, and prompt suffixes unchanged.
 
 Clean-room pack after verify leftovers. No forbidden source opened. CHARTER D* win; freeze conflicts are bugs (D15). Draft **v0.3** addressed `docs/reviews/verify.md` Issues 1–7 in place (no pack rewrite). Draft **v0.4** locks OQ-1..7 only.

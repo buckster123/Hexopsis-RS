@@ -31,4 +31,8 @@
 
 - **Hunyuan never auto.** Even with D19 gates, auto prefers colony/tripo/meshy/local.
 
-- **Shared iGPU is not 22 GiB VRAM.** Count `vram_mb` + `shared`. Krackan 512 MiB shared → remote or degrade.
+- **Shared iGPU is not 22 GiB VRAM.** Count `vram_mb` + `shared`. Krackan 512 MiB shared → remote or degrade. Never treat GTT, rocminfo pools, vulkan host heaps, or `/proc/meminfo` as VRAM.
+
+- **No auto-pull on generate.** `text2mesh weights pull ID --accept-license TAG` is CLI-only. Hunyuan ids refuse. DINOv3 on disk without accept → `present:true`, `accepted:false`.
+
+- **Idle unload.** API/MCP start with no sidecar child. `TEXT2MESH_IDLE_UNLOAD_S` default 120 kills leftovers. A sidecar *file* is not 24 GB of VRAM.

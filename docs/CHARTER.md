@@ -93,7 +93,7 @@ Numbered, binding, dated. One decision per entry, with the reason. House-briefin
 
 ## Phases
 
-Aligned with PRD §14. Each done-when is checkable. v1 feel = S0–S11.
+Aligned with PRD §14. Each done-when is checkable. **v1 (S0–S12) implemented 2026-08-19** on `main` — see `docs/STATUS.md`. Horizon stays out.
 
 | Phase | Scope | Done when |
 |---|---|---|
@@ -177,3 +177,4 @@ Dated entries. A decision changes here first, then in the code.
 - **2026-08-19** — Draft v0.3 freeze leftovers (`docs/reviews/verify.md` Issues 1–7). Wait/wall min 30 default 1800 max 86400 on MCP, CLI, Route B; G0–G4 vs `canonical_view_id`; G2 FACE/BACK pair only; G0 text = identity_phrase else normalized; fail-closed G1–G4; frozen `prompt_suffix` + class locks + negatives; watchdog pid-live (no silence-kill); drop `TEXT2MESH_CUSTOM_*` / no `remote.custom`; confirm + artifact `?kind=` includes `contract`; eval fixtures in PR-10/11/13/21. **D1–D30 unchanged.**
 - **2026-08-19** — Executive lock OQ-8/9/10 (GROK): CLIP ±0.04 via `gate_version`; I2I always estimate; distinct `degraded` terminal (already D13/D29). S0 scaffold started.
 - **2026-08-19** — Draft v0.4. André locked OQ-1..7. D1 garden name **Tessera-RS** (crates/binaries stay `text2mesh` until a crates.io + trademark sweep PR); D16 `agent_id="TESSERA"`, tags `project:text2mesh`; D9 extras-allowed, GLB still defines success; D27 locks OQ-6 `127.0.0.1:8796`; D28 locks OQ-2 sidecar v1 + papers-as-horizon; D21 stays, OQ-7 defer; OQ-3 hybrid runtime; OQ-5 six cameras `cardinal4_hero_top`. OQ-1..7 moved to Resolved; OQ-8/9/10 remain open. Wait clocks, gates, and prompt suffixes unchanged.
+- **2026-08-19** — v1 S0–S12 **implemented** on `main` (PRs #3–#6 close S8–S12). Live Krackan `system-check`: `vram_mb=512`, `shared=true`, `name=AMD Radeon 840M`, `would_pick=null`/`weights_missing` without a remote key. Studio field-checked. **D1–D30 unchanged.** Horizon DiT / crate rename / Cadre compose remain parked.

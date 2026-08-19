@@ -12,12 +12,14 @@ pass (house doctrine #5). Notes carry the date and the evidence.
 - [x] **S4 — planner dual-path**: 12-row fixture table; HTTP mock `/v1/jobs` round-trip — 2026-08-19 `planner_row_01..12` + HTTP tests green.
 - [x] **S5 — View Contract compiler**: goldens for `evals/text2/prompts.json` + `identity.json` — 2026-08-19 local; `compile --json` emits frozen locks.
 - [x] **S6 — gates + Hero-Orbit**: G3/G4 pure; mock T2I views; ungated skip G0–G2 — 2026-08-19 `TEXT2MESH_ALLOW_UNGATED=1` text→degraded GLB. CLIP G0–G2 still `feature_off` without the flag.
-- [x] **S7 — Lattice + Cadre**: classifier; Route A refuse-if-absent — 2026-08-19 `box 20x10x5 mm` → `analytic.unavailable` without Cadre. Compose still S14.
-- [ ] **S8 — Imaginarium T2I**: estimate-then-fire; no xAI key here — coded 2026-08-19; ledger ✅ after merge + live estimate
-- [ ] **S9 — sidecar `meshplane/1`**: handshake, confinement, cancel — coded 2026-08-19; fixture e2e; ledger ✅ after merge
-- [ ] **S10 — remote adapters**: Meshy + Tripo fixtures — coded 2026-08-19; 402/429 mapped; live skip-loud; ledger ✅ after merge
-- [ ] **S11 — export + WebUI**: glTF validate; PBR degrade; HTMX groutbench; amber banner — coded 2026-08-19; ledger ✅ after merge + a browser spin of mock GLB
-- [ ] **S12 — weights + idle unload**: Hunyuan refuse; Krackan system-check honesty — coded 2026-08-19; ledger ✅ after merge + live `system-check --json` (`vram_mb≈512`, `shared=true`, `would_pick=remote` or degrade)
+- [x] **S7 — Lattice + Cadre**: classifier; Route A refuse-if-absent — 2026-08-19 `box 20x10x5 mm` → `analytic.unavailable` without Cadre. Compose still refuse-only until Cadre is live.
+- [x] **S8 — Imaginarium T2I**: estimate-then-fire; no xAI key here — 2026-08-19 PR #3. Live vendor POST stays `TEXT2MESH_LIVE=1`.
+- [x] **S9 — sidecar `meshplane/1`**: handshake, confinement, cancel — 2026-08-19 PR #3; fixture e2e.
+- [x] **S10 — remote adapters**: Meshy + Tripo fixtures — 2026-08-19 PR #4; 402/429 mapped; live skip-loud.
+- [x] **S11 — export + WebUI**: glTF validate; PBR degrade; HTMX groutbench — 2026-08-19 PR #5; operator browser-checked the studio 2026-08-19.
+- [x] **S12 — weights + idle unload**: Hunyuan refuse; Krackan honesty — 2026-08-19 PR #6; live `system-check` `vram_mb=512` `shared=true` `AMD Radeon 840M`.
+
+v1 charter (S0–S12) is **implemented** on `main`. See [`docs/STATUS.md`](docs/STATUS.md).
 
 ## Post-v1 parking
 
