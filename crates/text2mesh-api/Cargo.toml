@@ -1,0 +1,27 @@
+[package]
+name = "text2mesh-api"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "text2mesh REST API + optional HTMX WebUI"
+
+[[bin]]
+name = "text2mesh-api"
+path = "src/main.rs"
+
+[dependencies]
+anyhow.workspace = true
+axum.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+text2mesh = { path = "../text2mesh" }
+tokio.workspace = true
+tower = { version = "0.5", features = ["util"] }
+tower-http.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+
+[dev-dependencies]
+http-body-util = "0.1"
+tempfile = "3"

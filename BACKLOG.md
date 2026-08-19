@@ -1,0 +1,28 @@
+# text2mesh (Tessera-RS) backlog — slice ledger
+
+A row gets its ✅ when the slice is **merged, deployed, and verified live** — not when tests
+pass (house doctrine #5). Notes carry the date and the evidence.
+
+## v1 (image or text → honest GLB)
+
+- [x] **S0 — bootstrap**: repo, CLAUDE.md, design contract, four crates, CI, dual LICENSE, banner — 2026-08-19 local `cargo test --workspace` 57/57; banner job `01M0DESM366XFHP7RMCBTQZTF8`. Field/Krackan still open.
+- [x] **S1 — types + store**: MeshJob, errors, SQLite, state machine, watchdog units — 2026-08-19 local green.
+- [x] **S2 — mock + faces**: deterministic vertex-colour GLB `degraded`; CLI/MCP/HTTP against mock — 2026-08-19 CLI smoke exit 1 + `status=degraded`. Field import in Blender still open.
+- [x] **S3 — honesty surfaces**: system-check, estimate, spend gate — 2026-08-19 `report_complete`/`ready`, no `ok` field.
+- [x] **S4 — planner dual-path**: 12-row fixture table; HTTP mock `/v1/jobs` round-trip — 2026-08-19 `planner_row_01..12` + HTTP tests green.
+- [ ] **S5 — View Contract compiler**: goldens for `evals/text2/prompts.json` + `identity.json`
+- [ ] **S6 — gates + Hero-Orbit**: G0–G4 pure; mock T2I; fail-closed
+- [ ] **S7 — Lattice + Cadre**: classifier; Route A refuse-if-absent
+- [ ] **S8 — Imaginarium T2I**: estimate-then-fire; no xAI key here
+- [ ] **S9 — sidecar `meshplane/1`**: handshake, confinement, cancel
+- [ ] **S10 — remote adapters**: Meshy + Tripo fixtures
+- [ ] **S11 — export + WebUI**: glTF validate; HTMX; amber degrade
+- [ ] **S12 — weights + idle unload**: Hunyuan refuse; Krackan system-check honesty
+
+## Post-v1 parking
+
+- In-process quality DiT from papers (OQ-2/OQ-3 horizon)
+- Crates.io + trademark sweep → `tessera` prefix
+- Pure-Rust print wrap (OQ-7)
+- Native/Slint viewer
+- Gaussian/NeRF extras if an engine emits them (success remains GLB)

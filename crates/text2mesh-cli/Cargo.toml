@@ -1,0 +1,22 @@
+[package]
+name = "text2mesh-cli"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "text2mesh CLI — human/ops face"
+
+[[bin]]
+name = "text2mesh"
+path = "src/main.rs"
+
+[dependencies]
+anyhow.workspace = true
+clap.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+text2mesh = { path = "../text2mesh" }
+text2mesh-api = { path = "../text2mesh-api" }
+tokio.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
