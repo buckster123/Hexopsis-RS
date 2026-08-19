@@ -11,6 +11,12 @@ use crate::types::{
 
 pub fn probe_from_env(allow_mock: bool) -> ProbeSnapshot {
     let mut probe = ProbeSnapshot::cpu_only(allow_mock || env_truthy("TEXT2MESH_ALLOW_MOCK"));
+    probe.devices = crate::probe::probe_devices();
+    let rows = crate::weights::scan_env();
+    probe.weights_present = crate::weights::quality_present(&rows);
+    probe.preview_weights = crate::weights::preview_present(&rows);
+    probe.dinov3_accepted = crate::weights::dinov3_accepted(&rows);
+    probe.licenses_accepted = crate::weights::licenses_ok(&rows);
     probe.tripo_key = key_present("TRIPO_API_KEY");
     probe.meshy_key = key_present("MESHY_API_KEY");
     probe.hunyuan_key = key_present("HUNYUAN_API_KEY");
@@ -20,7 +26,6 @@ pub fn probe_from_env(allow_mock: bool) -> ProbeSnapshot {
         && std::env::var("TEXT2MESH_HUNYUAN_ATTESTATION")
             .map(|p| std::path::Path::new(&p).is_file())
             .unwrap_or(false);
-    probe.dinov3_accepted = env_truthy("TEXT2MESH_ACCEPT_DINOV3");
     probe.cadre_live = std::env::var("TEXT2MESH_CADRE_URL")
         .ok()
         .filter(|s| !s.is_empty())
@@ -38,7 +43,7 @@ pub fn probe_from_env(allow_mock: bool) -> ProbeSnapshot {
         .ok()
         .filter(|s| !s.is_empty())
         .is_some();
-    if let Some(mb) = disk_free_mb() {
+    if let Some(mb) = crate::probe::disk_free_mb(&crate::weights::weights_dir()) {
         probe.disk_free_mb = mb;
     }
     probe
@@ -46,11 +51,6 @@ pub fn probe_from_env(allow_mock: bool) -> ProbeSnapshot {
 
 fn key_present(name: &str) -> bool {
     std::env::var(name).map(|v| !v.is_empty()).unwrap_or(false)
-}
-
-fn disk_free_mb() -> Option<u64> {
-    // Best-effort; Nano tests do not depend on the real number.
-    None
 }
 
 pub fn build_system_check(probe: &ProbeSnapshot, spend: &SpendPolicy) -> SystemCheck {
@@ -68,6 +68,7 @@ pub fn build_system_check(probe: &ProbeSnapshot, spend: &SpendPolicy) -> SystemC
         ready: would_pick.is_some(),
         product: PRODUCT.into(),
         version: VERSION.into(),
+        tier: detect_tier(probe),
         features: FeatureReport {
             compiled: vec!["remote-http".into(), "webui".into()],
             not_compiled: vec![
@@ -79,20 +80,17 @@ pub fn build_system_check(probe: &ProbeSnapshot, spend: &SpendPolicy) -> SystemC
             horizon_unscheduled: vec!["quality-candle".into(), "quality-ggml".into()],
         },
         devices: device_rows(probe),
-        weights: vec![WeightRow {
-            id: "quality.stack".into(),
-            present: probe.weights_present,
-            want_bytes: Some(16 * 1024 * 1024 * 1024),
-            have_bytes: None,
-            path: Some("~/.local/share/text2mesh/weights/quality.stack".into()),
-            sha256_head: None,
-            license: Some("MIT".into()),
-            accepted: probe.licenses_accepted,
-        }],
+        weights: weight_rows_from_probe(probe),
         licenses: LicenseReport {
             dinov3_accepted: probe.dinov3_accepted,
             hunyuan_community: "blocked_by_default".into(),
             cgal_gpl: "blocked_by_default".into(),
+            hunyuan_reasons: vec![
+                "territory_eu_uk_kr".into(),
+                "mau_cap".into(),
+                "no_train_on_outputs".into(),
+                "hk_law".into(),
+            ],
         },
         keys: key_rows(),
         sidecars: vec![],
@@ -136,9 +134,60 @@ pub fn system_check_from_env(allow_mock: bool) -> SystemCheck {
     let mut spend = cfg.spend_policy();
     spend.allow_spend = spend.allow_spend || env_truthy("TEXT2MESH_ALLOW_SPEND");
     let mut sc = build_system_check(&probe, &spend);
+    sc.weights = crate::weights::scan_env();
     sc.siblings = probe_siblings();
     sc.sidecars = probe_sidecar_rows();
     sc
+}
+
+fn detect_tier(probe: &ProbeSnapshot) -> Option<String> {
+    // Nano: no quality weights and (vram null or <6 GiB or shared). Sidecar cargo feature is off.
+    if probe.weights_present {
+        return None;
+    }
+    let (vram, shared) = gpu_vram(probe);
+    if vram == 0 || vram < 6144 || shared {
+        Some("nano".into())
+    } else {
+        None
+    }
+}
+
+fn gpu_vram(probe: &ProbeSnapshot) -> (u32, bool) {
+    let mut best = 0u32;
+    let mut shared = false;
+    for d in &probe.devices {
+        if d.kind == DeviceKind::Cpu {
+            continue;
+        }
+        let v = d.vram_mb.unwrap_or(0);
+        if v >= best {
+            best = v;
+            shared = d.shared;
+        }
+    }
+    (best, shared)
+}
+
+fn weight_rows_from_probe(probe: &ProbeSnapshot) -> Vec<WeightRow> {
+    let mut rows = crate::weights::catalog_empty_rows();
+    for r in &mut rows {
+        match r.id.as_str() {
+            "quality.stack" => {
+                r.present = probe.weights_present;
+                r.accepted = probe.licenses_accepted && probe.weights_present;
+            }
+            "preview.feedforward" => {
+                r.present = probe.preview_weights;
+                r.accepted = probe.preview_weights;
+            }
+            "encoder.dinov3_vitl16" => {
+                r.accepted = probe.dinov3_accepted;
+            }
+            _ => {}
+        }
+    }
+    rows
 }
 
 fn probe_siblings() -> Vec<SiblingRow> {
@@ -149,16 +198,23 @@ fn probe_siblings() -> Vec<SiblingRow> {
     let token = std::env::var("TEXT2MESH_IMAGINARIUM_TOKEN")
         .ok()
         .filter(|s| !s.is_empty());
-    let (ok, reason) = match crate::t2i_imaginarium::Imaginarium::new(url.clone(), token) {
-        Ok(im) => {
-            if im.health() {
-                (true, None)
-            } else {
-                (false, Some("health failed".into()))
-            }
-        }
-        Err(e) => (false, Some(e.message)),
-    };
+    // blocking reqwest must not run (or drop) on a tokio worker.
+    let url_h = url.clone();
+    let (ok, reason) =
+        std::thread::spawn(
+            move || match crate::t2i_imaginarium::Imaginarium::new(url_h, token) {
+                Ok(im) => {
+                    if im.health() {
+                        (true, None)
+                    } else {
+                        (false, Some("health failed".into()))
+                    }
+                }
+                Err(e) => (false, Some(e.message)),
+            },
+        )
+        .join()
+        .unwrap_or((false, Some("health probe panicked".into())));
     vec![
         SiblingRow {
             id: "imaginarium".into(),
@@ -213,7 +269,7 @@ fn device_rows(probe: &ProbeSnapshot) -> Vec<DeviceRow> {
                 slow: Some(d.slow),
                 vram_mb: d.vram_mb,
                 shared: d.shared,
-                name: None,
+                name: d.name.clone(),
                 reason: None,
             });
         } else {
@@ -374,5 +430,126 @@ mod tests {
         assert!(!row.present);
         assert!(row.head.is_none());
         assert_eq!(row.len, 0);
+    }
+
+    #[test]
+    fn cpu_only_is_nano_and_lists_catalog() {
+        let probe = ProbeSnapshot::cpu_only(false);
+        let sc = build_system_check(&probe, &SpendPolicy::default());
+        assert_eq!(sc.tier.as_deref(), Some("nano"));
+        assert_eq!(sc.weights.len(), 5);
+        assert!(sc
+            .licenses
+            .hunyuan_reasons
+            .iter()
+            .any(|r| r == "territory_eu_uk_kr"));
+    }
+
+    #[test]
+    fn krackan_shared_512_degrades_or_remote() {
+        use crate::types::DeviceProbe;
+        let probe = ProbeSnapshot {
+            devices: vec![
+                DeviceProbe {
+                    kind: DeviceKind::Cpu,
+                    vram_mb: None,
+                    shared: false,
+                    slow: true,
+                    name: None,
+                },
+                DeviceProbe {
+                    kind: DeviceKind::GpuVulkan,
+                    vram_mb: Some(512),
+                    shared: true,
+                    slow: true,
+                    name: Some("AMD Radeon 840M".into()),
+                },
+            ],
+            weights_present: true,
+            licenses_accepted: true,
+            sidecar_alive: true,
+            disk_free_mb: 100_000,
+            ..ProbeSnapshot::default()
+        };
+        let closed = SpendPolicy::default();
+        let sc = build_system_check(&probe, &closed);
+        let vk = sc
+            .devices
+            .iter()
+            .find(|d| d.kind == DeviceKind::GpuVulkan)
+            .unwrap();
+        assert_eq!(vk.vram_mb, Some(512));
+        assert!(vk.shared);
+        assert_eq!(vk.name.as_deref(), Some("AMD Radeon 840M"));
+        assert!(sc.planner.would_pick.is_none());
+        assert_eq!(
+            sc.planner.degrade.as_ref().map(|d| d.error_type.as_str()),
+            Some(error_type::VRAM_SHORT)
+        );
+
+        let mut open_probe = probe.clone();
+        open_probe.tripo_key = true;
+        open_probe.keys_present = true;
+        let open = SpendPolicy {
+            allow_spend: true,
+            max_usd: 2.0,
+        };
+        let sc = build_system_check(&open_probe, &open);
+        assert_eq!(sc.planner.would_pick, Some(PlaneId::RemoteTripo));
+        assert_ne!(sc.planner.would_pick, Some(PlaneId::LocalSidecar));
+    }
+
+    #[test]
+    fn live_krackan_sysfs_system_check_is_honest() {
+        // Field truth on Krackan: 512 MiB shared iGPU. CI without amdgpu is a no-op.
+        let probe = probe_from_env(false);
+        let Some(vk) = probe
+            .devices
+            .iter()
+            .find(|d| d.kind == DeviceKind::GpuVulkan)
+        else {
+            return;
+        };
+        if !vk.shared {
+            return;
+        }
+        assert!(
+            vk.vram_mb.is_some_and(|v| (256..=2048).contains(&v)),
+            "shared vulkan vram_mb={:?} must be the carve-out, not host RAM",
+            vk.vram_mb
+        );
+        let spend = SpendPolicy::default();
+        let sc = build_system_check(&probe, &spend);
+        let row = sc
+            .devices
+            .iter()
+            .find(|d| d.kind == DeviceKind::GpuVulkan)
+            .unwrap();
+        assert!(row.shared);
+        assert!(row.vram_mb.unwrap_or(0) < 4096);
+        match sc.planner.would_pick {
+            Some(PlaneId::RemoteTripo | PlaneId::RemoteMeshy | PlaneId::RemoteColony) => {}
+            Some(PlaneId::LocalSidecar | PlaneId::LocalPreview) => {
+                panic!("shared 512 MiB must not pick local quality")
+            }
+            Some(other) => {
+                if other != PlaneId::LocalMock {
+                    panic!("unexpected plane {other:?}");
+                }
+            }
+            None => {
+                let t = sc.planner.degrade.as_ref().map(|d| d.error_type.as_str());
+                assert!(
+                    matches!(
+                        t,
+                        Some("vram_short")
+                            | Some("weights_missing")
+                            | Some("spend.gated")
+                            | Some("not_configured")
+                    ),
+                    "got {t:?}"
+                );
+            }
+        }
     }
 }

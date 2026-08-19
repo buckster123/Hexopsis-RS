@@ -90,6 +90,21 @@ enum Command {
     Serve,
     /// Point .mcp.json at text2mesh-mcp; this subcommand only explains that.
     Mcp,
+    /// Catalog weights. CLI only — never exposed on MCP.
+    Weights {
+        #[command(subcommand)]
+        cmd: WeightsCmd,
+    },
+}
+
+#[derive(Subcommand)]
+enum WeightsCmd {
+    /// Fetch or stamp a catalog id after accepting its license. Never auto-runs on generate.
+    Pull {
+        id: String,
+        #[arg(long = "accept-license", required = true)]
+        accept_license: String,
+    },
 }
 
 #[derive(Args, Clone)]
@@ -190,6 +205,19 @@ async fn run(cli: Cli) -> Result<ExitCode, Error> {
                 .map(|_| ExitCode::SUCCESS)
                 .map_err(|e| Error::new(error_type::INTERNAL, e.to_string()));
         }
+        Command::Weights { cmd } => {
+            return run_weights(cli.json, cmd);
+        }
+        Command::SystemCheck { refresh: _ } => {
+            let sc = text2mesh::system_check::system_check_from_env(text2mesh::config::env_truthy(
+                "TEXT2MESH_ALLOW_MOCK",
+            ));
+            emit(cli.json, serde_json::to_value(&sc)?);
+            if !cli.json {
+                print_system_check(&sc);
+            }
+            return Ok(ExitCode::SUCCESS);
+        }
         Command::Compile {
             prompt,
             out,
@@ -226,14 +254,6 @@ async fn run(cli: Cli) -> Result<ExitCode, Error> {
     }
 
     match cli.cmd {
-        Command::SystemCheck { refresh: _ } => {
-            let sc = text2mesh::system_check::system_check_from_env(app.allow_mock);
-            emit(cli.json, serde_json::to_value(&sc)?);
-            if !cli.json {
-                print_system_check(&sc);
-            }
-            Ok(ExitCode::SUCCESS)
-        }
         Command::Estimate { job } => {
             let spec = job_submit(&job, cli.allow_spend)?;
             let est = app.estimate(&spec);
@@ -318,7 +338,35 @@ async fn run(cli: Cli) -> Result<ExitCode, Error> {
             }
             Ok(ExitCode::SUCCESS)
         }
-        Command::Serve | Command::Mcp | Command::Compile { .. } => unreachable!(),
+        Command::Serve
+        | Command::Mcp
+        | Command::Compile { .. }
+        | Command::Weights { .. }
+        | Command::SystemCheck { .. } => unreachable!(),
+    }
+}
+
+fn run_weights(as_json: bool, cmd: WeightsCmd) -> Result<ExitCode, Error> {
+    match cmd {
+        WeightsCmd::Pull { id, accept_license } => {
+            let row = text2mesh::weights::pull(&id, &accept_license)?;
+            emit(as_json, serde_json::to_value(&row)?);
+            if !as_json {
+                eprintln!(
+                    "weights {} present={} accepted={} path={}",
+                    row.id,
+                    row.present,
+                    row.accepted,
+                    row.path.as_deref().unwrap_or("-")
+                );
+                if !row.present {
+                    eprintln!(
+                        "license recorded; place files at the path (no auto-fetch; set TEXT2MESH_WEIGHTS_SRC to copy a local file)"
+                    );
+                }
+            }
+            Ok(ExitCode::SUCCESS)
+        }
     }
 }
 
@@ -461,9 +509,23 @@ fn emit_job(as_json: bool, job: &text2mesh::MeshJob) {
 
 fn print_system_check(sc: &SystemCheck) {
     println!(
-        "text2mesh {} report_complete={} ready={}",
-        sc.version, sc.report_complete, sc.ready
+        "text2mesh {} report_complete={} ready={} tier={}",
+        sc.version,
+        sc.report_complete,
+        sc.ready,
+        sc.tier.as_deref().unwrap_or("-")
     );
+    for d in &sc.devices {
+        if d.ok {
+            println!(
+                "  {} ok vram_mb={:?} shared={} name={}",
+                d.kind.as_str(),
+                d.vram_mb,
+                d.shared,
+                d.name.as_deref().unwrap_or("-")
+            );
+        }
+    }
     if let Some(p) = sc.planner.would_pick {
         println!("would_pick={}", p.as_str());
     } else if let Some(d) = &sc.planner.degrade {
@@ -512,7 +574,15 @@ fn exit_for_error(err: &Error) -> u8 {
 }
 
 fn exit_for_type(t: &str) -> u8 {
-    if matches!(t, "not_configured" | "weights_missing" | "feature_off") {
+    if matches!(
+        t,
+        "not_configured"
+            | "weights_missing"
+            | "feature_off"
+            | "disk_short"
+            | "vram_short"
+            | "device_missing"
+    ) {
         3
     } else if t.starts_with("spend.") || t.starts_with("license.") {
         4
@@ -538,6 +608,29 @@ mod tests {
         match cli.cmd {
             Command::Wait { timeout_s, .. } => assert_eq!(timeout_s, 1800),
             _ => panic!("expected wait"),
+        }
+    }
+
+    #[test]
+    fn weights_pull_requires_license() {
+        let cli = Cli::try_parse_from(["text2mesh", "weights", "pull", "quality.stack"]);
+        assert!(cli.is_err());
+        let cli = Cli::parse_from([
+            "text2mesh",
+            "weights",
+            "pull",
+            "encoder.dinov3_vitl16",
+            "--accept-license",
+            "dinov3",
+        ]);
+        match cli.cmd {
+            Command::Weights {
+                cmd: WeightsCmd::Pull { id, accept_license },
+            } => {
+                assert_eq!(id, "encoder.dinov3_vitl16");
+                assert_eq!(accept_license, "dinov3");
+            }
+            _ => panic!("expected weights pull"),
         }
     }
 

@@ -216,4 +216,15 @@ mod tests {
             WAIT_MAX_S
         );
     }
+
+    #[test]
+    fn no_weights_pull_on_mcp() {
+        for t in tool_schemas() {
+            let name = t["name"].as_str().unwrap_or("");
+            assert!(
+                !name.contains("weight"),
+                "weights pull is CLI-only, found {name}"
+            );
+        }
+    }
 }

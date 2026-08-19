@@ -10,6 +10,7 @@ use crate::error::{error_type, Error};
 use crate::export::{inspect_glb, ExportClass};
 use crate::gates::score_g3_g4;
 use crate::hash::sha256_bytes;
+use crate::idle::IdleUnload;
 use crate::mock_glb::emit_mock_glb_seeded;
 use crate::orbit::decode_png;
 use crate::planner::plan;
@@ -51,6 +52,7 @@ pub struct App {
     cancel: Arc<AtomicBool>,
     meshy: Option<Meshy>,
     tripo: Option<Tripo>,
+    idle: Arc<IdleUnload>,
 }
 
 impl App {
@@ -67,11 +69,14 @@ impl App {
             cancel: Arc::new(AtomicBool::new(false)),
             meshy: None,
             tripo: None,
+            idle: Arc::new(IdleUnload::new(120)),
         }
     }
 
     pub fn from_env() -> Result<Self, Error> {
         let cfg = crate::config::Config::from_env();
+        let idle = IdleUnload::from_env();
+        idle.spawn_watch();
         Ok(Self {
             store: Store::from_env()?,
             allow_mock: cfg.allow_mock,
@@ -84,6 +89,7 @@ impl App {
             cancel: Arc::new(AtomicBool::new(false)),
             meshy: Meshy::from_env()?,
             tripo: Tripo::from_env()?,
+            idle,
         })
     }
 
@@ -100,7 +106,12 @@ impl App {
             cancel: Arc::new(AtomicBool::new(false)),
             meshy: None,
             tripo: None,
+            idle: Arc::new(IdleUnload::new(0)),
         }
+    }
+
+    pub fn sidecar_loaded(&self) -> bool {
+        self.idle.loaded()
     }
 
     pub fn with_probe(mut self, probe: ProbeSnapshot) -> Self {
@@ -553,16 +564,24 @@ impl App {
             cancel: Some(self.cancel.clone()),
             args: Vec::new(),
         };
+        self.idle.job_begin();
         let result = match run_sidecar(&bin, &job.id, spec, &job_dir, &conditioned, cfg) {
-            Ok(r) => r,
+            Ok(r) => {
+                self.idle.job_end();
+                r
+            }
             Err(e) if e.error_type == error_type::CANCELLED => {
+                self.idle.job_end();
                 job.status = JobStatus::Cancelled;
                 job.error = Some(e);
                 job.touch();
                 self.store.update(&job)?;
                 return Ok(job);
             }
-            Err(e) => return self.fail(job, e),
+            Err(e) => {
+                self.idle.job_end();
+                return self.fail(job, e);
+            }
         };
         self.finish_glb(
             job,
@@ -1077,6 +1096,35 @@ pub fn compile_prompt(prompt: &str, spec: &JobSubmit) -> Result<crate::ViewContr
 mod tests {
     use super::*;
     use crate::types::{ComputeMode, JobSubmit, MaterialMode, PlaneId, ProbeSnapshot, Quality};
+
+    #[test]
+    fn process_starts_without_sidecar_vram() {
+        let app = App::for_test(true);
+        assert!(
+            !app.sidecar_loaded(),
+            "API/MCP/CLI must start with no sidecar child"
+        );
+    }
+
+    #[test]
+    fn generate_does_not_auto_pull_weights() {
+        let dir = tempfile::tempdir().unwrap();
+        let before = std::fs::read_dir(dir.path())
+            .map(|rd| rd.count())
+            .unwrap_or(0);
+        let app = App::for_test(true);
+        let (_tmp, png) = write_dot();
+        let _ = app.submit(JobSubmit {
+            image_path: Some(png.to_string_lossy().into_owned()),
+            compute: ComputeMode::Local,
+            provider: Some(PlaneId::LocalMock),
+            ..JobSubmit::default()
+        });
+        let after = std::fs::read_dir(dir.path())
+            .map(|rd| rd.count())
+            .unwrap_or(0);
+        assert_eq!(before, after, "generate must not write a weights pull");
+    }
 
     #[test]
     fn text_prompt_ungated_mock_degraded() {

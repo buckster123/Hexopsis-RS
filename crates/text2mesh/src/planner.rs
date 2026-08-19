@@ -432,6 +432,7 @@ mod tests {
             vram_mb: Some(vram_mb),
             shared,
             slow: false,
+            name: None,
         }
     }
 
@@ -510,12 +511,14 @@ mod tests {
                     vram_mb: None,
                     shared: false,
                     slow: true,
+                    name: None,
                 },
                 DeviceProbe {
                     kind: DeviceKind::GpuVulkan,
                     vram_mb: Some(512),
                     shared: true,
                     slow: true,
+                    name: Some("AMD Radeon 840M".into()),
                 },
             ],
             weights_present: true,
@@ -540,6 +543,7 @@ mod tests {
                 vram_mb: Some(512),
                 shared: true,
                 slow: true,
+                name: Some("AMD Radeon 840M".into()),
             }],
             weights_present: true,
             licenses_accepted: true,
@@ -661,6 +665,7 @@ mod tests {
                 vram_mb: Some(512),
                 shared: true,
                 slow: true,
+                name: Some("AMD Radeon 840M".into()),
             }],
             sidecar_alive: true,
             tripo_key: true,

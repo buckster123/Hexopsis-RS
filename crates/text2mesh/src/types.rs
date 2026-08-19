@@ -728,6 +728,8 @@ pub struct LicenseReport {
     pub dinov3_accepted: bool,
     pub hunyuan_community: String,
     pub cgal_gpl: String,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub hunyuan_reasons: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -755,6 +757,8 @@ pub struct SystemCheck {
     pub ready: bool,
     pub product: String,
     pub version: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tier: Option<String>,
     pub features: FeatureReport,
     pub devices: Vec<DeviceRow>,
     pub weights: Vec<WeightRow>,
@@ -816,6 +820,8 @@ pub struct DeviceProbe {
     pub shared: bool,
     #[serde(default)]
     pub slow: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -862,6 +868,7 @@ impl Default for ProbeSnapshot {
                 vram_mb: None,
                 shared: false,
                 slow: true,
+                name: None,
             }],
             features: Vec::new(),
             weights_present: false,
