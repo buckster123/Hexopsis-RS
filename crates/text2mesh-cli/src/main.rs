@@ -7,8 +7,9 @@ use clap::{Args, Parser, Subcommand};
 use serde_json::{json, Value};
 use text2mesh::error::error_type;
 use text2mesh::{
-    compile_not_yet, load_xdg_env, App, ArtifactKind, ComputeMode, DeviceKind, Error, JobStatus,
-    JobSubmit, PlaneId, Quality, Route, SystemCheck, WAIT_DEFAULT_S, WAIT_MAX_S, WAIT_MIN_S,
+    compile_view_contract, load_xdg_env, App, ArtifactKind, CompileOpts, ComputeMode, DeviceKind,
+    Error, JobStatus, JobSubmit, PlaneId, Quality, Route, SystemCheck, T2iProviderId,
+    WAIT_DEFAULT_S, WAIT_MAX_S, WAIT_MIN_S,
 };
 
 #[derive(Parser)]
@@ -68,12 +69,16 @@ enum Command {
         #[arg(long, default_value = "glb")]
         kind: String,
     },
-    /// View Contract compile (S5). Honest not-yet.
+    /// View Contract compile (pure, no T2I).
     Compile {
         #[arg(long)]
         prompt: String,
         #[arg(long)]
         out: Option<PathBuf>,
+        #[arg(long, default_value = "standard")]
+        quality: String,
+        #[arg(long)]
+        seed: Option<u64>,
     },
     Jobs {
         #[arg(long)]
@@ -185,20 +190,32 @@ async fn run(cli: Cli) -> Result<ExitCode, Error> {
                 .map(|_| ExitCode::SUCCESS)
                 .map_err(|e| Error::new(error_type::INTERNAL, e.to_string()));
         }
-        Command::Compile { prompt, out } => {
-            let err = compile_not_yet();
-            emit(
-                cli.json,
-                json!({
-                    "ok": false,
-                    "error_type": err.error_type,
-                    "message": err.message,
-                    "hint": err.hint,
-                    "prompt_len": prompt.chars().count(),
-                    "out": out,
-                }),
-            );
-            return Ok(ExitCode::from(2));
+        Command::Compile {
+            prompt,
+            out,
+            quality,
+            seed,
+        } => {
+            let q = parse_quality(&quality)?;
+            let contract = compile_view_contract(
+                &prompt,
+                CompileOpts {
+                    quality: q,
+                    camera_preset: None,
+                    family_seed: seed.unwrap_or(42),
+                    t2i_provider: T2iProviderId::Mock,
+                },
+            )?;
+            let v = serde_json::to_value(&contract)
+                .map_err(|e| Error::new(error_type::INTERNAL, e.to_string()))?;
+            if let Some(path) = out {
+                std::fs::write(&path, serde_json::to_vec_pretty(&contract)?)?;
+            }
+            emit(cli.json, v);
+            if !cli.json {
+                println!("{}", serde_json::to_string_pretty(&contract)?);
+            }
+            return Ok(ExitCode::SUCCESS);
         }
         _ => {}
     }

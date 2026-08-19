@@ -3,19 +3,26 @@
 //! Faces (MCP / CLI / HTTP) stay thin. Binding decisions: `docs/CHARTER.md`.
 
 pub mod canonical;
+pub mod classify;
+pub mod compiler;
 pub mod config;
+pub mod contract;
 pub mod director;
 pub mod error;
+pub mod gates;
 pub mod hash;
 pub mod mcp_schema;
 pub mod mock_glb;
+pub mod orbit;
 pub mod planner;
 pub mod store;
 pub mod system_check;
 pub mod types;
 
+pub use compiler::{compile_view_contract, CompileOpts};
 pub use config::Config;
-pub use director::{compile_not_yet, App};
+pub use contract::ViewContract;
+pub use director::App;
 pub use error::{error_type, Error};
 pub use planner::plan;
 pub use store::Store;

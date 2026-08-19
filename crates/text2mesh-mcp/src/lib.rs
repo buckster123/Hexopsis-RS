@@ -3,8 +3,8 @@
 use serde_json::{json, Value};
 use text2mesh::error::error_type;
 use text2mesh::{
-    compile_not_yet, mcp_schema, App, ArtifactKind, Error, JobStatus, JobSubmit, VERSION,
-    WAIT_DEFAULT_S, WAIT_MAX_S, WAIT_MIN_S,
+    compile_view_contract, mcp_schema, App, ArtifactKind, CompileOpts, Error, JobStatus, JobSubmit,
+    T2iProviderId, VERSION, WAIT_DEFAULT_S, WAIT_MAX_S, WAIT_MIN_S,
 };
 
 pub const PROTOCOL_VERSION: &str = "2024-11-05";
@@ -129,7 +129,28 @@ fn call_tool(app: &App, name: &str, args: &Value) -> Value {
             Ok(spec) => tool_ok(&serde_json::to_value(app.estimate(&spec)).unwrap_or(json!({}))),
             Err(e) => tool_error(&Error::new(error_type::SPEC_REJECTED, e.to_string())),
         },
-        "text2mesh_compile_contract" => tool_error(&compile_not_yet()),
+        "text2mesh_compile_contract" => {
+            let prompt = args
+                .get("prompt")
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .trim();
+            if prompt.is_empty() {
+                tool_error(&Error::new(error_type::SPEC_REJECTED, "prompt is required"))
+            } else {
+                match compile_view_contract(
+                    prompt,
+                    CompileOpts {
+                        family_seed: args.get("seed").and_then(|v| v.as_u64()).unwrap_or(42),
+                        t2i_provider: T2iProviderId::Mock,
+                        ..CompileOpts::default()
+                    },
+                ) {
+                    Ok(c) => tool_ok(&serde_json::to_value(&c).unwrap_or(json!({}))),
+                    Err(e) => tool_error(&e),
+                }
+            }
+        }
         "text2mesh_submit" => call_submit(app, args),
         "text2mesh_status" => match job_id(args) {
             Ok(id) => match app.status(&id) {

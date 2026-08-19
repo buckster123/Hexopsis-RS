@@ -3,16 +3,19 @@
 use std::path::Path;
 use std::time::{Duration, Instant};
 
+use crate::compiler::{compile_view_contract, CompileOpts};
 use crate::error::{error_type, Error};
+use crate::gates::score_g3_g4;
 use crate::hash::sha256_bytes;
 use crate::mock_glb::{emit_mock_glb_seeded, has_vertex_color};
+use crate::orbit::{decode_png, mock_view_png};
 use crate::planner::plan;
 use crate::store::Store;
 use crate::system_check::{estimate as estimate_job, probe_from_env};
 use crate::types::{
     ArtifactKind, Estimate, JobStatus, JobSubmit, Manifest, ManifestHashes, MaterialMode, MeshJob,
-    PlaneId, ProbeSnapshot, SpendPolicy, Timings, WaitResult, MANIFEST_SCHEMA, WAIT_MAX_S,
-    WAIT_MIN_S,
+    PlaneId, ProbeSnapshot, SpendPolicy, T2iProviderId, Timings, WaitResult, MANIFEST_SCHEMA,
+    WAIT_MAX_S, WAIT_MIN_S,
 };
 
 const MAX_UPLOAD_BYTES: u64 = 32 * 1024 * 1024;
@@ -21,6 +24,7 @@ pub struct App {
     pub store: Store,
     pub allow_mock: bool,
     pub allow_spend: bool,
+    pub allow_ungated: bool,
     /// Injected probe (tests). None → env probe.
     probe: Option<ProbeSnapshot>,
 }
@@ -31,6 +35,7 @@ impl App {
             store,
             allow_mock,
             allow_spend: false,
+            allow_ungated: false,
             probe: None,
         }
     }
@@ -41,6 +46,7 @@ impl App {
             store: Store::from_env()?,
             allow_mock: cfg.allow_mock,
             allow_spend: cfg.allow_spend,
+            allow_ungated: cfg.allow_ungated,
             probe: None,
         })
     }
@@ -50,6 +56,7 @@ impl App {
             store: Store::ephemeral().expect("ephemeral store"),
             allow_mock,
             allow_spend: false,
+            allow_ungated: true,
             probe: Some(ProbeSnapshot::cpu_only(allow_mock)),
         }
     }
@@ -192,6 +199,14 @@ impl App {
                     job.quality = q;
                 }
                 if choice.plane == PlaneId::LocalMock {
+                    let job = if spec.prompt.as_deref().is_some_and(|s| !s.trim().is_empty()) {
+                        self.synthesize_text(job, spec)?
+                    } else {
+                        job
+                    };
+                    if job.status == JobStatus::Failed {
+                        return Ok(job);
+                    }
                     self.run_mock(job, spec)
                 } else {
                     self.fail(
@@ -210,6 +225,60 @@ impl App {
                 }
             }
         }
+    }
+
+    fn synthesize_text(&self, mut job: MeshJob, spec: &JobSubmit) -> Result<MeshJob, Error> {
+        let prompt = spec.prompt.as_deref().unwrap_or("").trim();
+        let contract = compile_view_contract(
+            prompt,
+            CompileOpts {
+                quality: spec.quality,
+                camera_preset: spec.camera_preset,
+                family_seed: spec.seed.unwrap_or(42),
+                t2i_provider: T2iProviderId::Mock,
+            },
+        )?;
+        job.input.contract_id = Some(contract.contract_id.clone());
+        let bytes = serde_json::to_vec_pretty(&contract)?;
+        let cpath = self
+            .store
+            .write_artifact(&job.id, "contract.json", &bytes)?;
+        job.artifacts.contract = Some(cpath.to_string_lossy().into_owned());
+
+        let mut decoded = Vec::new();
+        for cam in &contract.camera_ring.cameras {
+            let png = mock_view_png(&contract, &cam.id)?;
+            let rel = format!("views/{}.png", cam.id);
+            let p = self.store.write_artifact(&job.id, &rel, &png)?;
+            job.artifacts.views.push(p.to_string_lossy().into_owned());
+            decoded.push((cam.id.clone(), decode_png(&png)?));
+        }
+
+        if !self.allow_ungated {
+            return self.fail(
+                job,
+                Error::new(
+                    error_type::FEATURE_OFF,
+                    "G0–G2 need a CLIP encoder; set TEXT2MESH_ALLOW_UNGATED=1 to run G3/G4 only",
+                )
+                .with_hint("CI / mock text path uses ALLOW_UNGATED; not an M3 claim"),
+            );
+        }
+        job.degrades.push("gate.encoder_missing".into());
+        let scores = score_g3_g4(&contract, &decoded);
+        if !scores.failed.is_empty() {
+            let specific = scores.failed[0].clone();
+            return self.fail(
+                job,
+                Error::new(error_type::VIEW_CONSISTENCY, "required view failed G3/G4")
+                    .with_also(scores.failed)
+                    .with_hint(specific),
+            );
+        }
+        job.stage = Some("gate".into());
+        job.touch();
+        self.store.update(&job)?;
+        Ok(job)
     }
 
     fn run_mock(&self, mut job: MeshJob, spec: &JobSubmit) -> Result<MeshJob, Error> {
@@ -493,19 +562,41 @@ fn status_name(s: JobStatus) -> &'static str {
     }
 }
 
-/// Compile is S5 — honest not-yet.
-pub fn compile_not_yet() -> Error {
-    Error::new(
-        error_type::FEATURE_OFF,
-        "View Contract compiler is not yet implemented (S5)",
+/// Compile a View Contract (S5).
+pub fn compile_prompt(prompt: &str, spec: &JobSubmit) -> Result<crate::ViewContract, Error> {
+    compile_view_contract(
+        prompt,
+        CompileOpts {
+            quality: spec.quality,
+            camera_preset: spec.camera_preset,
+            family_seed: spec.seed.unwrap_or(42),
+            t2i_provider: T2iProviderId::Mock,
+        },
     )
-    .with_hint("do not invent a golden contract")
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::types::{ComputeMode, JobSubmit};
+    use crate::types::{ComputeMode, JobSubmit, Quality};
+
+    #[test]
+    fn text_prompt_ungated_mock_degraded() {
+        let app = App::for_test(true);
+        let job = app
+            .submit(JobSubmit {
+                prompt: Some("a red fox wearing a yellow raincoat".into()),
+                compute: ComputeMode::Local,
+                provider: Some(PlaneId::LocalMock),
+                quality: Quality::Preview,
+                ..JobSubmit::default()
+            })
+            .unwrap();
+        assert_eq!(job.status, JobStatus::Degraded);
+        assert!(job.artifacts.contract.is_some());
+        assert_eq!(job.artifacts.views.len(), 4);
+        assert!(job.degrades.iter().any(|d| d == "gate.encoder_missing"));
+    }
 
     fn write_dot() -> (tempfile::TempDir, std::path::PathBuf) {
         let dir = tempfile::TempDir::new().unwrap();

@@ -39,6 +39,21 @@ pub enum PromptClass {
     Unknown,
 }
 
+impl PromptClass {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Analytic => "analytic",
+            Self::Creature => "creature",
+            Self::Character => "character",
+            Self::Product => "product",
+            Self::Vehicle => "vehicle",
+            Self::Architecture => "architecture",
+            Self::Prop => "prop",
+            Self::Unknown => "unknown",
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum Quality {
@@ -222,6 +237,17 @@ pub enum CameraPreset {
     Cardinal4HeroTop,
     Cardinal4HeroTopQuarters,
     NativePassthrough,
+}
+
+impl CameraPreset {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Cardinal4 => "cardinal4",
+            Self::Cardinal4HeroTop => "cardinal4_hero_top",
+            Self::Cardinal4HeroTopQuarters => "cardinal4_hero_top_quarters",
+            Self::NativePassthrough => "native_passthrough",
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]

@@ -13,6 +13,7 @@ pub struct Config {
     pub store: Option<PathBuf>,
     pub allow_spend: bool,
     pub allow_mock: bool,
+    pub allow_ungated: bool,
     pub max_usd_per_job: f64,
     pub max_usd_per_day: f64,
     pub token: Option<String>,
@@ -25,6 +26,7 @@ impl Default for Config {
             store: None,
             allow_spend: false,
             allow_mock: false,
+            allow_ungated: false,
             max_usd_per_job: 2.0,
             max_usd_per_day: 10.0,
             token: None,
@@ -47,6 +49,7 @@ impl Config {
         }
         c.allow_spend = env_truthy("TEXT2MESH_ALLOW_SPEND");
         c.allow_mock = env_truthy("TEXT2MESH_ALLOW_MOCK");
+        c.allow_ungated = env_truthy("TEXT2MESH_ALLOW_UNGATED");
         if let Ok(v) = std::env::var("TEXT2MESH_MAX_USD_PER_JOB") {
             if let Ok(n) = v.parse() {
                 c.max_usd_per_job = n;
