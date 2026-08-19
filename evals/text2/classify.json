@@ -1,0 +1,6 @@
+[
+  {"prompt": "a red fox wearing a yellow raincoat", "class": "creature"},
+  {"prompt": "portrait of a woman in a blue coat", "class": "character"},
+  {"prompt": "box 20x10x5 mm", "class": "analytic"},
+  {"prompt": "a fox 20 mm tall", "class": "creature", "also_analytic": true}
+]

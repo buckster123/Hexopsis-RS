@@ -1,0 +1,15 @@
+creature
+monster
+animal
+beast
+dragon
+fox
+cat
+dog
+bird
+wolf
+bear
+horse
+fish
+snake
+wearing
