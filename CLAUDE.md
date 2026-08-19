@@ -1,8 +1,8 @@
-# text2mesh (Tessera-RS) — Agent & Developer Guide
+# text2mesh (Hexopsis-RS) — Agent & Developer Guide
 
 > Image or text → glTF 2.0 GLB with core PBR, local **or** remote, one `MeshJob`.
 > Four-face workspace: core lib + MCP + CLI + HTTP.
-> Standalone-first. ApexOS is a consumer, never the owner. Garden name **Tessera-RS**; crate prefix `text2mesh` until a sweep PR.
+> Standalone-first. ApexOS is a consumer, never the owner. Garden name **Hexopsis-RS**; crate prefix `text2mesh` until a sweep PR.
 
 Bootstrapped 2026-08-19. House conventions come from `~/Projects/Launchpad-RS/`
 — load a doc from there when you need the detail behind a rule below.
@@ -50,7 +50,7 @@ The load-bearing summary; **`docs/CHARTER.md` D1–D30 is the binding long form.
 - **Nano-first**: default build has no ggml/CUDA/ONNX; job timeouts never < 30 s
 - **Honesty**: mock/vertex-colour → `degraded`; grey → `failed`; no orphan `pending`
 - **Spend gated**; no `XAI_API_KEY` in this process; Hunyuan never auto
-- **Cerebro** agent id `TESSERA`, tags `project:text2mesh`
+- **Cerebro** agent id `HEXOPSIS`, tags `project:text2mesh`
 
 ---
 
@@ -64,7 +64,7 @@ Full rationale: `~/Projects/Launchpad-RS/docs/house-doctrine.md`.
 4. **Pure-fn tests.** Planner, classifier, compiler, gates, parsers. Handlers are glue.
 5. **Field truth beats green CI.** Ledger ✅ only after a live job or stated degrade.
 6. **Secrets hygiene.** Lengths/heads only. No credentials in CLAUDE.md.
-7. **Cerebro is the thread.** `session_recall` in, `session_save` out. `agent_id="TESSERA"`.
+7. **Cerebro is the thread.** `session_recall` in, `session_save` out. `agent_id="HEXOPSIS"`.
 8. **Spend is gated.** Paid POST never auto-fires.
 9. **Cost the failure.** Paid remote poll expiry → `waiting_upstream`, not silent fail.
 
@@ -82,10 +82,10 @@ Full rationale: `~/Projects/Launchpad-RS/docs/house-doctrine.md`.
 
 ## Cerebro session protocol
 
-All Cerebro MCP calls use `agent_id="TESSERA"` for this product (GROK may also write
+All Cerebro MCP calls use `agent_id="HEXOPSIS"` for this product (GROK may also write
 `project:text2mesh` tags). Full menu: `~/Projects/Launchpad-RS/docs/cerebro-protocol.md`.
 
-**START:** `session_recall(query="text2mesh Tessera-RS build status", agent_id="TESSERA")`
+**START:** `session_recall(query="text2mesh Hexopsis-RS build status", agent_id="HEXOPSIS")`
 **END:** `session_save` + `remember` for decisions.
 
 ---

@@ -1,4 +1,4 @@
-//! text2mesh (Tessera-RS) core — MeshJob, planner, mock plane, store.
+//! text2mesh (Hexopsis-RS) core — MeshJob, planner, mock plane, store.
 //!
 //! Faces (MCP / CLI / HTTP) stay thin. Binding decisions: `docs/CHARTER.md`.
 

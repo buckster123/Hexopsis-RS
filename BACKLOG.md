@@ -1,4 +1,4 @@
-# text2mesh (Tessera-RS) backlog — slice ledger
+# text2mesh (Hexopsis-RS) backlog — slice ledger
 
 A row gets its ✅ when the slice is **merged, deployed, and verified live** — not when tests
 pass (house doctrine #5). Notes carry the date and the evidence.

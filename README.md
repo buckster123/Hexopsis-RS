@@ -1,8 +1,8 @@
 <div align="center">
 
-<img src="assets/banner.jpg" alt="Tessera-RS / text2mesh" width="100%">
+<img src="assets/banner.jpg" alt="Hexopsis-RS / text2mesh" width="100%">
 
-<h1>Tessera-RS <em>(text2mesh)</em></h1>
+<h1>Hexopsis-RS <em>(text2mesh)</em></h1>
 
 <p><strong>Image or text in. Honest glTF 2.0 GLB out.</strong><br>
 Local sidecar <em>or</em> a networked provider. One <code>MeshJob</code>. Three faces. No fake success.</p>
@@ -10,7 +10,7 @@ Local sidecar <em>or</em> a networked provider. One <code>MeshJob</code>. Three 
 <p>
 <img alt="license" src="https://img.shields.io/badge/license-MIT%20OR%20Apache--2.0-blue">
 <img alt="rust" src="https://img.shields.io/badge/rust-2021-orange?logo=rust&logoColor=white">
-<img alt="ci" src="https://img.shields.io/github/actions/workflow/status/buckster123/Tessera-RS/ci.yml?label=ci">
+<img alt="ci" src="https://img.shields.io/github/actions/workflow/status/buckster123/Hexopsis-RS/ci.yml?label=ci">
 <img alt="status" src="https://img.shields.io/badge/status-v0.1%20·%20shipped-brightgreen">
 </p>
 
@@ -23,7 +23,7 @@ Local sidecar <em>or</em> a networked provider. One <code>MeshJob</code>. Three 
 
 ## Why
 
-Most “text-to-3D” tools fire N independent T2I samples at an image-to-mesh model and hope the views agree. **Tessera-RS** treats the text path as a compiler:
+Most “text-to-3D” tools fire N independent T2I samples at an image-to-mesh model and hope the views agree. **Hexopsis-RS** treats the text path as a compiler:
 
 1. **Lattice Router** — analytic CAD vs visual vs native text-3D
 2. **View Contract** — typed subject lock, camera ring, lighting, negatives, seeds
@@ -33,7 +33,7 @@ Most “text-to-3D” tools fire N independent T2I samples at an image-to-mesh m
 
 Dual compute is one planner over probes: local sidecar / preview, or Meshy / Tripo / colony. `auto` is not a third engine. Paid work never auto-fires.
 
-Garden name **Tessera-RS**. Working crate and binary prefix stay `text2mesh` until a crates.io rename sweep.
+Garden name **Hexopsis-RS** (ἕξ + ὄψις, six-sight). Working crate and binary prefix stay `text2mesh` until a crates.io sweep to `hexopsis`.
 
 ## Surfaces
 
@@ -61,8 +61,8 @@ This is the product, not a disclaimer.
 ## Quick start
 
 ```sh
-git clone https://github.com/buckster123/Tessera-RS
-cd Tessera-RS
+git clone https://github.com/buckster123/Hexopsis-RS
+cd Hexopsis-RS
 cargo build --release --workspace
 
 # free honesty probe — VRAM is the GPU carve-out, not your 22 GiB of RAM

@@ -4,7 +4,7 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 repository.workspace = true
-description = "Tessera-RS core — MeshJob, planner, mock plane, store"
+description = "Hexopsis-RS core — MeshJob, planner, mock plane, store"
 
 [dependencies]
 async-trait.workspace = true

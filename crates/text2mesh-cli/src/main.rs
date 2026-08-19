@@ -16,7 +16,7 @@ use text2mesh::{
 #[command(
     name = "text2mesh",
     version,
-    about = "Tessera-RS — image or text → honest GLB"
+    about = "Hexopsis-RS — image or text → honest GLB"
 )]
 struct Cli {
     #[arg(long, global = true)]

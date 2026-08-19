@@ -1,6 +1,6 @@
 # Contributing
 
-Garden name **Tessera-RS**. Working crates stay `text2mesh` until a rename sweep (CHARTER D1).
+Garden name **Hexopsis-RS**. Working crates stay `text2mesh` until a rename sweep (CHARTER D1).
 
 1. Read [`docs/CHARTER.md`](docs/CHARTER.md) — D1–D30 bind. Amend with a dated entry; never silently.
 2. [`docs/design.md`](docs/design.md) is the wire. Behaviour changes update it in the **same commit**.

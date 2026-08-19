@@ -2,13 +2,13 @@
 
 Operator guide. Binding product rules: [`CHARTER.md`](CHARTER.md). Wire: [`design.md`](design.md). v1 close-out: [`STATUS.md`](STATUS.md).
 
-Binary name is `text2mesh`. Garden name is **Tessera-RS**. Default bind is `127.0.0.1:8796`.
+Binary name is `text2mesh`. Garden name is **Hexopsis-RS**. Default bind is `127.0.0.1:8796`.
 
 ## Install
 
 ```sh
-git clone https://github.com/buckster123/Tessera-RS
-cd Tessera-RS
+git clone https://github.com/buckster123/Hexopsis-RS
+cd Hexopsis-RS
 cargo build --release --workspace
 # binaries: target/release/text2mesh  target/release/text2mesh-mcp  target/release/meshplane-fixture
 ```

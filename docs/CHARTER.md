@@ -3,8 +3,8 @@
 > **The decisions log below is BINDING.** Amend it with a dated entry; never silently.
 > Where this document and the code disagree, one of them is a bug — say which.
 > Where a later doc and D1–Dn disagree, **D1–Dn win**.
-> Working name `text2mesh`. Garden name **Tessera-RS** (OQ-1 locked 2026-08-19). Cerebro product id **TESSERA**.
-> Adopted 2026-08-19 from `docs/prd.md` Draft v0.1; **amended 2026-08-19 for Draft v0.2**; **amended 2026-08-19 for Draft v0.3 freeze leftovers (D1–D30 unchanged)**; **amended 2026-08-19 for Draft v0.4 OQ-1..7 lock**.
+> Working name `text2mesh`. Garden name **Hexopsis-RS** (OQ-1 re-locked 2026-08-19). Cerebro product id **HEXOPSIS**.
+> Adopted 2026-08-19 from `docs/prd.md` Draft v0.1; **amended 2026-08-19 for Draft v0.2**; **amended 2026-08-19 for Draft v0.3 freeze leftovers (D1–D30 unchanged)**; **amended 2026-08-19 for Draft v0.4 OQ-1..7 lock**; **amended 2026-08-19 Hexopsis-RS** (Tessera-RS vacated).
 
 **Custody (not an implementer bibliography).** Implement from `docs/prd.md` + `docs/design.md` + this charter + Khronos glTF 2.0 + the GGUF spec + crates.io. Do **not** clone or open `src/` of AI_trellis2cpp, TRELLIS / TRELLIS.2 Python, Hunyuan3D, TripoSR, or Meshy. PRD Appendix B is **writer provenance only** — not a clone list. Research notes under `docs/research/` are not implementation specs. Full allowed/forbidden list: PRD §0.1 and design § Provenance.
 
@@ -31,7 +31,7 @@ It is a garden sibling: Cadre owns dimensioned CAD; Imaginarium owns T2I keys; O
 
 Numbered, binding, dated. One decision per entry, with the reason. House-briefing **OQ-1..7 locked 2026-08-19** (Resolved list). **OQ-8/9/10 remain open.**
 
-- **D1 — Garden name Tessera-RS; working crates stay `text2mesh` until a sweep PR (2026-08-19; amended 2026-08-19 OQ-1).** Garden name locked **Tessera-RS**. Repo, crate prefix, and binaries stay `text2mesh` until a crates.io + trademark sweep PR renames to `tessera` / `tessera-mcp` (do not rename files until that PR). Cerebro product id **TESSERA** from this amendment (D16). `figment` and `loom` remain taken on crates.io.
+- **D1 — Garden name Hexopsis-RS; working crates stay `text2mesh` until a sweep PR (2026-08-19; amended 2026-08-19 OQ-1; amended 2026-08-19 name clearance).** Garden name locked **Hexopsis-RS** (ἕξ + ὄψις, six-sight — the View Contract’s six views become one body). Repo folder and GitHub are `Hexopsis-RS`. Crate prefix and binaries stay `text2mesh` until a crates.io sweep to `hexopsis` / `hexopsis-mcp` (those slugs were free 2026-08-19). Cerebro product id **HEXOPSIS** (D16). **Tessera-RS vacated:** crates.io `tessera` is Sensat’s 3D-Tiles geometric-error crate; Adeia/Tessera Inc holds a semiconductor mark. `figment` and `loom` remain taken.
 
 - **D2 — Clean-room, not a port (2026-08-19; amended v0.2).** Implement from `docs/prd.md`, `docs/design.md`, public format specs (glTF 2.0, GGUF), and crates.io. Do not open or paraphrase statement-level source from AI_trellis2cpp / TRELLIS / Hunyuan / TripoSR / Meshy trees. Independent types, wire formats, file formats, crate names, and stage names. **Implementers do not follow PRD Appendix B URLs** (writer provenance only; do not clone those trees). Rules out dual-maintenance of a C++/Python surface.
 
@@ -61,7 +61,7 @@ Numbered, binding, dated. One decision per entry, with the reason. House-briefin
 
 - **D15 — Contract first (2026-08-19).** `docs/design.md` is the wire/file/API contract. Behaviour changes update design in the **same commit**. PRD is product intent; design is implementable freeze; D* win.
 
-- **D16 — Cerebro agent id `TESSERA` (2026-08-19; amended 2026-08-19 OQ-1).** Session memory for this repo: `agent_id="TESSERA"`, tags `project:text2mesh`. Not a runtime hard dependency. Crate/binary rename still waits for the D1 sweep PR.
+- **D16 — Cerebro agent id `HEXOPSIS` (2026-08-19; amended 2026-08-19 OQ-1; amended 2026-08-19 name clearance).** Session memory for this repo: `agent_id="HEXOPSIS"`, tags `project:text2mesh`. Not a runtime hard dependency. Crate/binary rename still waits for the D1 sweep PR. Prior `TESSERA` id is retired with the garden name.
 
 - **D17 — Crate map is a requirement; internal modules are free (2026-08-19; amended v0.2).** v1 members: **only** `text2mesh`, `text2mesh-mcp`, `text2mesh-cli`, `text2mesh-api`. Core may contain rusqlite, process spawn, and HTTP adapter *modules* — that is four-face, not a sixth crate. `text2mesh-provider` / `-engine` / `-io` / `-slint` are **not v1**; splitting them needs a dated amendment. Rename of prefix follows D1 (crates.io + trademark sweep PR).
 
@@ -146,7 +146,7 @@ Horizon (not v1): in-process quality DiT from papers (OQ-2/OQ-3 locked; sidecar 
 
 House briefing OQ-1..7. Locked 2026-08-19 by André. Not a silent close.
 
-1. **OQ-1 Product/crate name — (a) Tessera-RS.** Garden name locked **Tessera-RS**. Working crate prefix / binaries stay `text2mesh` until a crates.io + trademark sweep PR renames to `tessera` / `tessera-mcp`. Cerebro product id **TESSERA** from this amendment (D16). Tags stay `project:text2mesh`. (b) Figment-RS — crates.io collision. (c) Loom-RS — collision. (d) keep `text2mesh` as garden name — rejected.
+1. **OQ-1 Product/crate name — Hexopsis-RS (2026-08-19 re-lock).** First lock was Tessera-RS (mosaic tile). Vacated after name clearance: crates.io `tessera` is a 3D-Tiles crate; Adeia holds Tessera as a semiconductor mark. New lock **Hexopsis-RS** (ἕξ+ὄψις). Crates/binaries stay `text2mesh` until a sweep to `hexopsis` / `hexopsis-mcp`. Cerebro id **HEXOPSIS**. Tags stay `project:text2mesh`. (b) Figment-RS — crates.io collision. (c) Loom-RS — collision. (d) keep `text2mesh` as garden name — rejected. (e) Tessera-RS — vacated.
 
 2. **OQ-2 Default local quality engine — (c) sidecar v1 + (a) as horizon.** S9 implements sidecar; D28 forbids treating in-process occupy/form/refine as a v1 dependency. Independent Rust from papers is horizon, not v1. `quality-candle` / `quality-ggml` stay unscheduled. (b) in-process ggml in v1 — rejected.
 
@@ -178,3 +178,4 @@ Dated entries. A decision changes here first, then in the code.
 - **2026-08-19** — Executive lock OQ-8/9/10 (GROK): CLIP ±0.04 via `gate_version`; I2I always estimate; distinct `degraded` terminal (already D13/D29). S0 scaffold started.
 - **2026-08-19** — Draft v0.4. André locked OQ-1..7. D1 garden name **Tessera-RS** (crates/binaries stay `text2mesh` until a crates.io + trademark sweep PR); D16 `agent_id="TESSERA"`, tags `project:text2mesh`; D9 extras-allowed, GLB still defines success; D27 locks OQ-6 `127.0.0.1:8796`; D28 locks OQ-2 sidecar v1 + papers-as-horizon; D21 stays, OQ-7 defer; OQ-3 hybrid runtime; OQ-5 six cameras `cardinal4_hero_top`. OQ-1..7 moved to Resolved; OQ-8/9/10 remain open. Wait clocks, gates, and prompt suffixes unchanged.
 - **2026-08-19** — v1 S0–S12 **implemented** on `main` (PRs #3–#6 close S8–S12). Live Krackan `system-check`: `vram_mb=512`, `shared=true`, `name=AMD Radeon 840M`, `would_pick=null`/`weights_missing` without a remote key. Studio field-checked. **D1–D30 unchanged.** Horizon DiT / crate rename / Cadre compose remain parked.
+- **2026-08-19** — **D1/D16/OQ-1 re-lock.** Garden name **Hexopsis-RS**. Tessera-RS vacated (crates.io `tessera` = Sensat 3D Tiles; Adeia mark). Crates stay `text2mesh`. Cerebro id **HEXOPSIS**. GitHub + folder `Hexopsis-RS`. D2–D15 and D17–D30 unchanged.
