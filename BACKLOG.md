@@ -17,7 +17,7 @@ pass (house doctrine #5). Notes carry the date and the evidence.
 - [ ] **S9 — sidecar `meshplane/1`**: handshake, confinement, cancel — coded 2026-08-19; fixture e2e; ledger ✅ after merge
 - [ ] **S10 — remote adapters**: Meshy + Tripo fixtures — coded 2026-08-19; 402/429 mapped; live skip-loud; ledger ✅ after merge
 - [ ] **S11 — export + WebUI**: glTF validate; PBR degrade; HTMX groutbench; amber banner — coded 2026-08-19; ledger ✅ after merge + a browser spin of mock GLB
-- [ ] **S12 — weights + idle unload**: Hunyuan refuse; Krackan system-check honesty
+- [ ] **S12 — weights + idle unload**: Hunyuan refuse; Krackan system-check honesty — coded 2026-08-19; ledger ✅ after merge + live `system-check --json` (`vram_mb≈512`, `shared=true`, `would_pick=remote` or degrade)
 
 ## Post-v1 parking
 

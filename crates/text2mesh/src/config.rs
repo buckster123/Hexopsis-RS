@@ -22,6 +22,7 @@ pub struct Config {
     pub imaginarium_token: Option<String>,
     pub meshy_url: String,
     pub tripo_url: String,
+    pub idle_unload_s: u64,
 }
 
 impl Default for Config {
@@ -40,6 +41,7 @@ impl Default for Config {
             imaginarium_token: None,
             meshy_url: crate::remote::MESHY_DEFAULT.into(),
             tripo_url: crate::remote::TRIPO_DEFAULT.into(),
+            idle_unload_s: 120,
         }
     }
 }
@@ -98,6 +100,11 @@ impl Config {
         if let Ok(u) = std::env::var("TEXT2MESH_TRIPO_URL") {
             if !u.is_empty() {
                 c.tripo_url = u;
+            }
+        }
+        if let Ok(v) = std::env::var("TEXT2MESH_IDLE_UNLOAD_S") {
+            if let Ok(n) = v.parse() {
+                c.idle_unload_s = n;
             }
         }
         c
