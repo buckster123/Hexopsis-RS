@@ -2,7 +2,7 @@
 
 | Field | Value |
 |---|---|
-| **Status** | v0.4 — implement from this |
+| **Status** | v0.4 — implement from this (S8/S9: Imaginarium T2I + meshplane/1) |
 | **Date** | 2026-08-19 |
 | **Wins over** | informal chat, research notes |
 | **Loses to** | CHARTER D1–D30 |
@@ -1147,15 +1147,19 @@ Never send them a key we do not have. Edit sources ≤ 3. Hero + nearest neighbo
 
 ### 19.1 Imaginarium wire (public routes only)
 
-Base: `TEXT2MESH_IMAGINARIUM_URL` default `http://127.0.0.1:8791`. Probe: `GET /v1/health` (probe budget 5 s).
+Base: `TEXT2MESH_IMAGINARIUM_URL` default `http://127.0.0.1:8791`. Optional `TEXT2MESH_IMAGINARIUM_TOKEN`. **Never** `XAI_API_KEY`.
+
+Probe (5 s): sibling public `GET /health`, then `GET /v1/health` if the first 404s.
+
+v1 director is **blocking**. The `T2iProvider` impl is sync (`reqwest` blocking); the sketch above stays the shape. Tests inject a loopback fake. Live calls require `allow_spend` and skip unless `TEXT2MESH_LIVE=1`.
 
 | Our op | Their route | We send | We read |
 |---|---|---|---|
-| estimate | `POST /v1/estimate` | `{ n_t2i, n_i2i, model? }` as their public estimate accepts | `usd`, caps |
-| hero T2I | `POST /v1/images/generations` | assembled hero prompt + negatives + size 1024 | image URL or bytes → write `views/hero.png` |
-| orbit I2I | `POST /v1/images/edits` | 1–3 source images (hero [+ neighbor]) + orbit prompt | write `views/<id>.png` |
+| estimate | `POST /v1/estimate` | sibling `{ kind:"image", model, n }` where `n = n_t2i + n_i2i` (no distinct I2I unit → `usd_uncertain` when `n_i2i>0`, OQ-9) | `estimated_usd` |
+| hero T2I | `POST /v1/images/generations` | assembled hero prompt + 1:1 / 1k / model `2.0` | `assets[0].content_url` (or `upstream_url`) → `views/hero.png` |
+| orbit I2I | `POST /v1/images/edits` | `images`: `library:{job_id}` and/or `data:image/png;base64,…` (≤3; **no bare paths**) + orbit prompt | write `views/<id>.png` |
 
-Timeouts: per-image uses **job** budget (≥30 s), not probe 5 s. Errors: 402 → `spend.provider_402`; missing sibling → `t2i.unavailable`. Our `max_usd` = min(ours, their caps).
+Timeouts: per-image uses **job** budget (≥30 s), not probe 5 s. Errors: 402 → `spend.provider_402`; missing sibling → `t2i.unavailable`. Our `max_usd` = min(ours, their caps). Paid T2I on a non-mock plane with `usd>0` and a closed gate → `needs_confirm`. `local.mock` keeps the $0 mock T2I.
 
 ### 19.2 Cadre wire (public routes only)
 

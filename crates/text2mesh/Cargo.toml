@@ -8,7 +8,9 @@ description = "Tessera-RS core — MeshJob, planner, mock plane, store"
 
 [dependencies]
 async-trait.workspace = true
+base64.workspace = true
 dirs.workspace = true
+reqwest.workspace = true
 hex.workspace = true
 image.workspace = true
 rusqlite.workspace = true
@@ -22,5 +24,10 @@ tokio.workspace = true
 tracing.workspace = true
 ulid.workspace = true
 
+[[bin]]
+name = "meshplane-fixture"
+path = "src/bin/meshplane_fixture.rs"
+
 [dev-dependencies]
+serde_json.workspace = true
 tempfile = "3"

@@ -13,8 +13,8 @@ pass (house doctrine #5). Notes carry the date and the evidence.
 - [x] **S5 — View Contract compiler**: goldens for `evals/text2/prompts.json` + `identity.json` — 2026-08-19 local; `compile --json` emits frozen locks.
 - [x] **S6 — gates + Hero-Orbit**: G3/G4 pure; mock T2I views; ungated skip G0–G2 — 2026-08-19 `TEXT2MESH_ALLOW_UNGATED=1` text→degraded GLB. CLIP G0–G2 still `feature_off` without the flag.
 - [x] **S7 — Lattice + Cadre**: classifier; Route A refuse-if-absent — 2026-08-19 `box 20x10x5 mm` → `analytic.unavailable` without Cadre. Compose still S14.
-- [ ] **S8 — Imaginarium T2I**: estimate-then-fire; no xAI key here
-- [ ] **S9 — sidecar `meshplane/1`**: handshake, confinement, cancel
+- [ ] **S8 — Imaginarium T2I**: estimate-then-fire; no xAI key here — coded 2026-08-19; ledger ✅ after merge + live estimate
+- [ ] **S9 — sidecar `meshplane/1`**: handshake, confinement, cancel — coded 2026-08-19; fixture e2e; ledger ✅ after merge
 - [ ] **S10 — remote adapters**: Meshy + Tripo fixtures
 - [ ] **S11 — export + WebUI**: glTF validate; HTMX; amber degrade
 - [ ] **S12 — weights + idle unload**: Hunyuan refuse; Krackan system-check honesty

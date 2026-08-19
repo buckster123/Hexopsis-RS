@@ -136,7 +136,66 @@ pub fn system_check_from_env(allow_mock: bool) -> SystemCheck {
     let probe = probe_from_env(allow_mock);
     let mut spend = cfg.spend_policy();
     spend.allow_spend = spend.allow_spend || env_truthy("TEXT2MESH_ALLOW_SPEND");
-    build_system_check(&probe, &spend)
+    let mut sc = build_system_check(&probe, &spend);
+    sc.siblings = probe_siblings();
+    sc.sidecars = probe_sidecar_rows();
+    sc
+}
+
+fn probe_siblings() -> Vec<SiblingRow> {
+    let url = std::env::var("TEXT2MESH_IMAGINARIUM_URL")
+        .ok()
+        .filter(|s| !s.is_empty())
+        .unwrap_or_else(|| "http://127.0.0.1:8791".into());
+    let token = std::env::var("TEXT2MESH_IMAGINARIUM_TOKEN")
+        .ok()
+        .filter(|s| !s.is_empty());
+    let (ok, reason) = match crate::t2i_imaginarium::Imaginarium::new(url.clone(), token) {
+        Ok(im) => {
+            if im.health() {
+                (true, None)
+            } else {
+                (false, Some("health failed".into()))
+            }
+        }
+        Err(e) => (false, Some(e.message)),
+    };
+    vec![
+        SiblingRow {
+            id: "imaginarium".into(),
+            url,
+            ok,
+            reason,
+        },
+        SiblingRow {
+            id: "cadre".into(),
+            url: std::env::var("TEXT2MESH_CADRE_URL")
+                .unwrap_or_else(|_| "http://127.0.0.1:7410".into()),
+            ok: std::env::var("TEXT2MESH_CADRE_URL")
+                .ok()
+                .filter(|s| !s.is_empty())
+                .is_some()
+                || std::env::var("TEXT2MESH_CADRE_BIN")
+                    .ok()
+                    .filter(|s| !s.is_empty())
+                    .is_some(),
+            reason: None,
+        },
+    ]
+}
+
+fn probe_sidecar_rows() -> Vec<serde_json::Value> {
+    let Some(bin) = crate::sidecar::sidecar_bin_from_env() else {
+        return vec![];
+    };
+    let p = crate::sidecar::probe_sidecar(&bin, std::time::Duration::from_secs(5));
+    vec![serde_json::json!({
+        "path": bin,
+        "ok": p.ok,
+        "protocol": p.protocol,
+        "engine": p.engine,
+        "reason": p.reason,
+    })]
 }
 
 fn device_rows(probe: &ProbeSnapshot) -> Vec<DeviceRow> {
