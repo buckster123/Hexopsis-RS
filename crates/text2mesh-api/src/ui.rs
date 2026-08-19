@@ -12,14 +12,14 @@ pub fn page(app: &App, job: Option<&MeshJob>) -> Markup {
             head {
                 meta charset="utf-8";
                 meta name="viewport" content="width=device-width, initial-scale=1";
-                title { "Tessera" }
+                title { "Hexopsis" }
                 style { (PreEscaped(CSS)) }
                 script src="/static/htmx.min.js" {}
                 script type="module" src="https://ajax.googleapis.com/ajax/libs/model-viewer/3.5.0/model-viewer.min.js" {}
             }
             body {
                 header class="chrome" {
-                    h1 { "Tessera" }
+                    h1 { "Hexopsis" }
                     span class="muted" { "127.0.0.1:8796" }
                     (probe)
                 }

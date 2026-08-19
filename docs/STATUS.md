@@ -3,7 +3,7 @@
 | Field | Value |
 |---|---|
 | **Date** | 2026-08-19 |
-| **Repo** | [`buckster123/Tessera-RS`](https://github.com/buckster123/Tessera-RS) `main` |
+| **Repo** | [`buckster123/Hexopsis-RS`](https://github.com/buckster123/Hexopsis-RS) `main` |
 | **Close-out** | after PR #6 (`5400a18`) |
 | **Charter** | D1–D30 unchanged; phases S0–S12 **implemented** |
 
@@ -41,7 +41,7 @@ With a Tripo/Meshy key and spend open, auto picks **remote**, never local standa
 
 - Cadre compose — analytic prompts still `analytic.unavailable` until Cadre is live (D8)
 - CLIP G0–G2 — `feature_off` unless `TEXT2MESH_ALLOW_UNGATED=1` (G3/G4 only)
-- Crates.io + trademark sweep — garden name **Tessera-RS**, crates stay `text2mesh` (D1)
+- Crates.io sweep — garden name **Hexopsis-RS**, crates stay `text2mesh` until `hexopsis` / `hexopsis-mcp` (D1)
 - Horizon in-process quality DiT — **not scheduled** (`quality-candle` / `quality-ggml` stay out of `Cargo.toml`)
 - Native/Slint viewer, print wrap, Gaussian/NeRF-as-success — CHARTER “out of v1”
 
@@ -49,9 +49,9 @@ With a Tripo/Meshy key and spend open, auto picks **remote**, never local standa
 
 | # | Slice |
 |---|---|
-| [#1](https://github.com/buckster123/Tessera-RS/pull/1) | S5 View Contract + S6 Hero-Orbit |
-| [#2](https://github.com/buckster123/Tessera-RS/pull/2) | S7 Lattice |
-| [#3](https://github.com/buckster123/Tessera-RS/pull/3) | S8 Imaginarium + S9 sidecar |
-| [#4](https://github.com/buckster123/Tessera-RS/pull/4) | S10 Meshy + Tripo |
-| [#5](https://github.com/buckster123/Tessera-RS/pull/5) | S11 export + groutbench |
-| [#6](https://github.com/buckster123/Tessera-RS/pull/6) | S12 weights, licenses, idle unload, Krackan probe |
+| [#1](https://github.com/buckster123/Hexopsis-RS/pull/1) | S5 View Contract + S6 Hero-Orbit |
+| [#2](https://github.com/buckster123/Hexopsis-RS/pull/2) | S7 Lattice |
+| [#3](https://github.com/buckster123/Hexopsis-RS/pull/3) | S8 Imaginarium + S9 sidecar |
+| [#4](https://github.com/buckster123/Hexopsis-RS/pull/4) | S10 Meshy + Tripo |
+| [#5](https://github.com/buckster123/Hexopsis-RS/pull/5) | S11 export + groutbench |
+| [#6](https://github.com/buckster123/Hexopsis-RS/pull/6) | S12 weights, licenses, idle unload, Krackan probe |

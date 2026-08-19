@@ -577,7 +577,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn webui_home_is_tessera_not_saas() {
+    async fn webui_home_is_hexopsis_not_saas() {
         let state = ApiState {
             app: Arc::new(App::for_test(true)),
             token: None,
@@ -591,7 +591,7 @@ mod tests {
             .await
             .unwrap();
         let html = String::from_utf8(bytes.to_vec()).unwrap();
-        assert!(html.contains("Tessera"));
+        assert!(html.contains("Hexopsis"));
         assert!(html.contains("#e0a04a"), "amber token missing");
         assert!(!html.contains("Success!"));
         assert!(!html.contains("confetti"));

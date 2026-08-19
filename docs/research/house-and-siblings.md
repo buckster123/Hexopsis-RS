@@ -163,7 +163,7 @@ DocSmith (`Scriptum-RS/DocSmith-PRD-Iterated-Opus-123/docsmith-prd.md`) is the g
 
 Crate map is a Cadre D16-class **requirement** (named members); internal module design stays free. S0 keeps a thin facade so the workspace resolves from commit 0; slices split into named crates rather than growing a monolith.
 
-**Crate prefix:** `text2mesh` until CHARTER OQ-1 (garden name candidates: Figment-RS, Tessera-RS, Loom-RS) closes. Rename is a dated amendment, not silent drift.
+**Crate prefix:** `text2mesh` until the D1 sweep. Garden name closed **Hexopsis-RS** (2026-08-19); Tessera-RS vacated. Rename of crates is a dated amendment, not silent drift.
 
 | Crate | Role | S0? |
 |-------|------|-----|

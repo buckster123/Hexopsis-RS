@@ -5,11 +5,11 @@
 | **Status** | Draft v0.4 — **v1 (S0–S12) implemented 2026-08-19** on `main`. This file stays the product contract. |
 | **Date** | 2026-08-19 |
 | **Working name** | `text2mesh` (repo, crate prefix, binaries until D1 sweep PR) |
-| **Garden name** | **Tessera-RS** (OQ-1 locked 2026-08-19) |
+| **Garden name** | **Hexopsis-RS** (OQ-1 re-locked 2026-08-19; Tessera-RS vacated) |
 | **House** | Launchpad-RS |
 | **Operator** | André (buckster123) |
 | **Agent** | GROK |
-| **Cerebro product id** | `TESSERA` (OQ-1; tags `project:text2mesh`) |
+| **Cerebro product id** | `HEXOPSIS` (OQ-1; tags `project:text2mesh`) |
 | **Contract twin** | `docs/design.md` (normative wire) · `docs/CHARTER.md` (binding D*) |
 
 This document is the **product** contract. `docs/design.md` is the **implementation** contract. CHARTER D* win on conflict. **v1 (S0–S12) is on `main` as of 2026-08-19** (`docs/STATUS.md`). Nothing in this file is a port.
@@ -63,7 +63,7 @@ No reference-project source was opened for this PRD.
 | Store `<job_id>/{job.json,manifest.json,artifact.glb}` | Their private mesh containers |
 | Bind `127.0.0.1:8796` | Their demo ports |
 
-Working product name stays **`text2mesh`**. Garden name locked **Tessera-RS** (OQ-1). Crate/binary rename waits for a crates.io + trademark sweep PR (D1). Cerebro product id **TESSERA**.
+Working product name stays **`text2mesh`**. Garden name locked **Hexopsis-RS** (OQ-1 re-lock). Crate/binary rename waits for a crates.io sweep to `hexopsis` / `hexopsis-mcp` (D1). Cerebro product id **HEXOPSIS**.
 
 ---
 
@@ -1306,7 +1306,7 @@ Numbered. Rationale attached. CHARTER D* bind. OQ-1..7 **locked 2026-08-19** in 
 
 | ID | Decision | Rationale |
 |---|---|---|
-| **KD-1** | Garden name **Tessera-RS**; working name **`text2mesh`** until a crates.io + trademark sweep PR. Cerebro id **TESSERA**. | OQ-1 (a) locked 2026-08-19. Repo exists. `figment`/`loom` collide. Tessera = mosaic tile. Do not rename files until the sweep PR. Tags stay `project:text2mesh`. |
+| **KD-1** | Garden name **Hexopsis-RS**; working name **`text2mesh`** until a crates.io sweep to `hexopsis`. Cerebro id **HEXOPSIS**. | OQ-1 re-locked 2026-08-19. Tessera-RS vacated (crates.io `tessera` + Adeia mark). Tags stay `project:text2mesh`. |
 | **KD-2** | Clean-room. Implement from this PRD + design + public specs. | House precedent (DocSmith, OmniOcular, Cadre). Ports fail license and originality. |
 | **KD-3** | Four-face crates: `text2mesh` / `-mcp` / `-cli` / `-api`. WebUI inside `-api`. | Launchpad stack; three co-equal callers + jobs. |
 | **KD-4** | MCP `2024-11-05` hand-rolled, no SDK, stdout sacred. | Cadre OQ-7 closed this way; garden pin. |
@@ -1323,7 +1323,7 @@ Numbered. Rationale attached. CHARTER D* bind. OQ-1..7 **locked 2026-08-19** in 
 | **KD-15** | DINOv3 encoder is opt-in with accept flag + attribution. | Not MIT; gated HF; redistribution duties. |
 | **KD-16** | Never default-link CGAL / GPL print wrap. | Infects the binary. |
 | **KD-17** | Single schema source; drift is CI fail. | Cadre D13. |
-| **KD-18** | Cerebro agent id `TESSERA`; tags `project:text2mesh`; never a runtime hard dep. | OQ-1 / D16; Cadre D15 pattern. |
+| **KD-18** | Cerebro agent id `HEXOPSIS`; tags `project:text2mesh`; never a runtime hard dep. | OQ-1 / D16; Cadre D15 pattern. |
 | **KD-19** | No telemetry. | House. |
 | **KD-20** | Contract first: design.md before code; behaviour + docs in the same commit. | Doctrine #1. |
 | **KD-21** | Slices off `main`; never stacked PRs. | Doctrine #2. |
@@ -1350,11 +1350,11 @@ House briefing OQ-1..7 **Resolved 2026-08-19** (André). CHARTER D* bind. OQ-8/9
 
 ### OQ-1 — Product / crate name
 
-**Resolved 2026-08-19: (a) Tessera-RS.** Working crate prefix / binaries stay `text2mesh` until a crates.io + trademark sweep PR renames to `tessera` / `tessera-mcp`. Cerebro product id **TESSERA** from this lock (D16). Tags stay `project:text2mesh`. Do not rename files until that PR.
+**Resolved 2026-08-19: Hexopsis-RS** (re-lock; first lock Tessera-RS vacated). Working crate prefix / binaries stay `text2mesh` until a crates.io sweep to `hexopsis` / `hexopsis-mcp`. Cerebro product id **HEXOPSIS** (D16). Tags stay `project:text2mesh`.
 
 | Option | Notes |
 |---|---|
-| **(a) Locked: Tessera-RS** | Mosaic of views. Crate prefix `tessera` after a crates.io + trademark sweep. Binaries `tessera`, `tessera-mcp`. Cerebro id `TESSERA`. |
+| **Locked: Hexopsis-RS** | ἕξ+ὄψις six-sight. Crate prefix `hexopsis` after a crates.io sweep. Binaries stay `text2mesh` until then. Cerebro id `HEXOPSIS`. |
 | (b) Figment-RS | Pairs with Imaginarium; **crates.io `figment` is taken** (config lib). |
 | (c) Loom-RS | Weave metaphor; **crates.io `loom` is taken** (concurrency). |
 | (d) Keep `text2mesh` | Honest, dull, no sweep — rejected as garden name. |
