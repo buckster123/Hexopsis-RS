@@ -12,6 +12,9 @@ use crate::hash::sha256_bytes;
 use crate::mock_glb::{emit_mock_glb_seeded, has_vertex_color};
 use crate::orbit::decode_png;
 use crate::planner::plan;
+use crate::remote::RemoteOutcome;
+use crate::remote_meshy::Meshy;
+use crate::remote_tripo::Tripo;
 use crate::router::{route_job, RouteDecision};
 use crate::sidecar::{run_sidecar, sidecar_bin_from_env, SidecarCfg};
 use crate::store::Store;
@@ -45,6 +48,8 @@ pub struct App {
     sidecar_bin: Option<PathBuf>,
     sidecar_cancel_grace: Duration,
     cancel: Arc<AtomicBool>,
+    meshy: Option<Meshy>,
+    tripo: Option<Tripo>,
 }
 
 impl App {
@@ -59,6 +64,8 @@ impl App {
             sidecar_bin: sidecar_bin_from_env(),
             sidecar_cancel_grace: Duration::from_secs(30),
             cancel: Arc::new(AtomicBool::new(false)),
+            meshy: None,
+            tripo: None,
         }
     }
 
@@ -74,6 +81,8 @@ impl App {
             sidecar_bin: cfg.sidecar.or_else(sidecar_bin_from_env),
             sidecar_cancel_grace: Duration::from_secs(30),
             cancel: Arc::new(AtomicBool::new(false)),
+            meshy: Meshy::from_env()?,
+            tripo: Tripo::from_env()?,
         })
     }
 
@@ -88,6 +97,8 @@ impl App {
             sidecar_bin: None,
             sidecar_cancel_grace: Duration::from_millis(100),
             cancel: Arc::new(AtomicBool::new(false)),
+            meshy: None,
+            tripo: None,
         }
     }
 
@@ -103,6 +114,16 @@ impl App {
 
     pub fn with_sidecar(mut self, bin: PathBuf) -> Self {
         self.sidecar_bin = Some(bin);
+        self
+    }
+
+    pub fn with_meshy(mut self, meshy: Meshy) -> Self {
+        self.meshy = Some(meshy);
+        self
+    }
+
+    pub fn with_tripo(mut self, tripo: Tripo) -> Self {
+        self.tripo = Some(tripo);
         self
     }
 
@@ -269,7 +290,10 @@ impl App {
                 if let Some(q) = choice.quality_rewrite {
                     job.quality = q;
                 }
-                let job = if spec.prompt.as_deref().is_some_and(|s| !s.trim().is_empty()) {
+                let native_remote = spec.allow_native_text && choice.plane.is_remote();
+                let job = if spec.prompt.as_deref().is_some_and(|s| !s.trim().is_empty())
+                    && !native_remote
+                {
                     self.synthesize_text(job, spec, choice.plane)?
                 } else {
                     job
@@ -280,17 +304,17 @@ impl App {
                 match choice.plane {
                     PlaneId::LocalMock => self.run_mock(job, spec),
                     PlaneId::LocalSidecar => self.run_sidecar_plane(job, spec),
+                    PlaneId::RemoteMeshy | PlaneId::RemoteTripo => {
+                        self.run_remote(job, spec, choice.plane)
+                    }
                     other => self.fail(
                         job,
                         Error::new(
                             error_type::NOT_CONFIGURED,
-                            format!(
-                                "plane {} is not wired (remote adapters are S10)",
-                                other.as_str()
-                            ),
+                            format!("plane {} is not wired (colony is post-S10)", other.as_str()),
                         )
                         .with_hint(
-                            "use --compute local --provider local.mock or TEXT2MESH_SIDECAR",
+                            "use --compute local --provider local.mock, TEXT2MESH_SIDECAR, or a Meshy/Tripo key",
                         ),
                     ),
                 }
@@ -581,6 +605,102 @@ impl App {
         ))
     }
 
+    fn run_remote(
+        &self,
+        mut job: MeshJob,
+        spec: &JobSubmit,
+        plane: PlaneId,
+    ) -> Result<MeshJob, Error> {
+        job.status = JobStatus::Submitted;
+        job.stage = Some("submit".into());
+        job.touch();
+        self.store.update(&job)?;
+
+        let native =
+            spec.allow_native_text && spec.prompt.as_deref().is_some_and(|s| !s.trim().is_empty());
+        let outcome = if native {
+            let prompt = spec.prompt.as_deref().unwrap_or("").trim();
+            match plane {
+                PlaneId::RemoteMeshy => match self.meshy_or_err() {
+                    Ok(m) => m.run_text(prompt),
+                    Err(e) => return self.fail(job, e),
+                },
+                PlaneId::RemoteTripo => match self.tripo_or_err() {
+                    Ok(t) => t.run_text(prompt),
+                    Err(e) => return self.fail(job, e),
+                },
+                _ => unreachable!(),
+            }
+        } else {
+            let png_path = match self.ensure_conditioned(&job) {
+                Ok(p) => p,
+                Err(e) => return self.fail(job, e),
+            };
+            let png = std::fs::read(&png_path)?;
+            match plane {
+                PlaneId::RemoteMeshy => match self.meshy_or_err() {
+                    Ok(m) => m.run_image(&png),
+                    Err(e) => return self.fail(job, e),
+                },
+                PlaneId::RemoteTripo => match self.tripo_or_err() {
+                    Ok(t) => t.run_image(&png),
+                    Err(e) => return self.fail(job, e),
+                },
+                _ => unreachable!(),
+            }
+        };
+        match outcome {
+            Ok(RemoteOutcome::Waiting { upstream_id }) => {
+                job.status = JobStatus::WaitingUpstream;
+                job.upstream_id = Some(upstream_id);
+                job.error = Some(Error::new(
+                    error_type::WAIT_TIMEOUT,
+                    "remote poll window expired; upstream_id retained",
+                ));
+                job.touch();
+                self.store.update(&job)?;
+                Ok(job)
+            }
+            Ok(RemoteOutcome::Done(art)) => {
+                job.upstream_id = Some(art.upstream_id.clone());
+                if let Some(usd) = art.usd {
+                    job.spend.actual_usd = Some(usd);
+                }
+                job.status = JobStatus::Running;
+                self.finish_glb(
+                    job,
+                    &art.glb,
+                    FinishGlb {
+                        engine: &art.engine,
+                        plane,
+                        disclaimer: None,
+                        sidecar_protocol: None,
+                        synthesis: if native {
+                            Some(Synthesis::NativePassthrough)
+                        } else {
+                            Some(Synthesis::HeroOrbit)
+                        },
+                    },
+                )
+            }
+            Err(e) => self.fail(job, e),
+        }
+    }
+
+    fn meshy_or_err(&self) -> Result<&Meshy, Error> {
+        self.meshy.as_ref().ok_or_else(|| {
+            Error::new(error_type::NOT_CONFIGURED, "MESHY_API_KEY is missing")
+                .with_hint("set MESHY_API_KEY; we never POST without it")
+        })
+    }
+
+    fn tripo_or_err(&self) -> Result<&Tripo, Error> {
+        self.tripo.as_ref().ok_or_else(|| {
+            Error::new(error_type::NOT_CONFIGURED, "TRIPO_API_KEY is missing")
+                .with_hint("set TRIPO_API_KEY; we never POST without it")
+        })
+    }
+
     fn finish_glb(
         &self,
         mut job: MeshJob,
@@ -745,7 +865,15 @@ impl App {
         }
         self.cancel.store(true, std::sync::atomic::Ordering::SeqCst);
         job.cancel_requested = true;
-        if job.plane == Some(PlaneId::LocalMock)
+        let remote = job.plane.is_some_and(|p| p.is_remote());
+        if remote
+            && matches!(
+                job.status,
+                JobStatus::Submitted | JobStatus::Running | JobStatus::WaitingUpstream
+            )
+        {
+            // Design §8.3: keep state; cancel_requested is the honest flag.
+        } else if job.plane == Some(PlaneId::LocalMock)
             || job.status == JobStatus::Queued
             || job.status == JobStatus::NeedsConfirm
             || job.status == JobStatus::Running
@@ -1149,5 +1277,137 @@ mod tests {
             .unwrap();
         assert_eq!(job.status, JobStatus::Failed);
         assert_eq!(job.error.unwrap().error_type, error_type::T2I_UNAVAILABLE);
+    }
+
+    #[test]
+    fn tripo_image_fixture_degraded() {
+        let (base, h) = crate::remote::tests::serve_fake(crate::remote::tests::FakeMode::Ok);
+        let tripo = crate::remote_tripo::Tripo::for_test(base, "tok".into()).unwrap();
+        let mut app = App::for_test(false)
+            .with_tripo(tripo)
+            .with_probe(ProbeSnapshot {
+                tripo_key: true,
+                keys_present: true,
+                ..ProbeSnapshot::cpu_only(false)
+            });
+        app.allow_spend = true;
+        let (_tmp, png) = write_dot();
+        let job = app
+            .submit(JobSubmit {
+                image_path: Some(png.to_string_lossy().into_owned()),
+                compute: ComputeMode::Remote,
+                provider: Some(PlaneId::RemoteTripo),
+                allow_spend: true,
+                quality: Quality::Preview,
+                ..JobSubmit::default()
+            })
+            .unwrap();
+        assert_eq!(job.status, JobStatus::Degraded);
+        assert_eq!(job.plane, Some(PlaneId::RemoteTripo));
+        assert_eq!(job.upstream_id.as_deref(), Some("task_tripo_1"));
+        let man: Manifest = serde_json::from_str(
+            &std::fs::read_to_string(job.artifacts.manifest.as_ref().unwrap()).unwrap(),
+        )
+        .unwrap();
+        assert_eq!(man.engine.as_deref(), Some("tripo"));
+        assert!(!man.ok);
+        drop(h);
+    }
+
+    #[test]
+    fn meshy_402_fails_job() {
+        let (base, h) = crate::remote::tests::serve_fake(crate::remote::tests::FakeMode::Credit402);
+        let meshy = crate::remote_meshy::Meshy::for_test(base, "tok".into()).unwrap();
+        let mut app = App::for_test(false)
+            .with_meshy(meshy)
+            .with_probe(ProbeSnapshot {
+                meshy_key: true,
+                keys_present: true,
+                ..ProbeSnapshot::cpu_only(false)
+            });
+        app.allow_spend = true;
+        let (_tmp, png) = write_dot();
+        let job = app
+            .submit(JobSubmit {
+                image_path: Some(png.to_string_lossy().into_owned()),
+                compute: ComputeMode::Remote,
+                provider: Some(PlaneId::RemoteMeshy),
+                allow_spend: true,
+                ..JobSubmit::default()
+            })
+            .unwrap();
+        assert_eq!(job.status, JobStatus::Failed);
+        assert_eq!(
+            job.error.as_ref().unwrap().error_type,
+            error_type::SPEND_PROVIDER_402
+        );
+        drop(h);
+    }
+
+    #[test]
+    fn remote_without_client_never_posts() {
+        let app = App::for_test(false).with_probe(ProbeSnapshot {
+            tripo_key: true,
+            keys_present: true,
+            ..ProbeSnapshot::cpu_only(false)
+        });
+        let mut app = app;
+        app.allow_spend = true;
+        let (_tmp, png) = write_dot();
+        let job = app
+            .submit(JobSubmit {
+                image_path: Some(png.to_string_lossy().into_owned()),
+                compute: ComputeMode::Remote,
+                provider: Some(PlaneId::RemoteTripo),
+                allow_spend: true,
+                ..JobSubmit::default()
+            })
+            .unwrap();
+        assert_eq!(job.status, JobStatus::Failed);
+        assert_eq!(job.error.unwrap().error_type, error_type::NOT_CONFIGURED);
+    }
+
+    #[test]
+    fn remote_spend_gated_needs_confirm() {
+        let app = App::for_test(false).with_probe(ProbeSnapshot {
+            tripo_key: true,
+            keys_present: true,
+            ..ProbeSnapshot::cpu_only(false)
+        });
+        let (_tmp, png) = write_dot();
+        let job = app
+            .submit(JobSubmit {
+                image_path: Some(png.to_string_lossy().into_owned()),
+                compute: ComputeMode::Remote,
+                provider: Some(PlaneId::RemoteTripo),
+                allow_spend: false,
+                ..JobSubmit::default()
+            })
+            .unwrap();
+        assert_eq!(job.status, JobStatus::NeedsConfirm);
+        assert_eq!(
+            job.error.as_ref().unwrap().error_type,
+            error_type::SPEND_GATED
+        );
+    }
+
+    #[test]
+    fn remote_cancel_keeps_submitted() {
+        let app = App::for_test(false);
+        let mut job = MeshJob::from_submit(
+            ulid::Ulid::new().to_string(),
+            &JobSubmit {
+                image_path: Some("dot.png".into()),
+                ..JobSubmit::default()
+            },
+        );
+        job.status = JobStatus::Submitted;
+        job.plane = Some(PlaneId::RemoteMeshy);
+        job.upstream_id = Some("task_meshy_1".into());
+        app.store.create(&job).unwrap();
+        let c = app.cancel(&job.id).unwrap();
+        assert_eq!(c.status, JobStatus::Submitted);
+        assert!(c.cancel_requested);
+        assert_eq!(c.upstream_id.as_deref(), Some("task_meshy_1"));
     }
 }

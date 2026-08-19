@@ -1,0 +1,11 @@
+{
+  "id": "task_meshy_1",
+  "type": "image-to-3d",
+  "status": "SUCCEEDED",
+  "progress": 100,
+  "consumed_credits": 30,
+  "model_urls": {
+    "glb": "https://assets.meshy.ai/tasks/task_meshy_1/output/model.glb"
+  },
+  "task_error": { "message": "" }
+}

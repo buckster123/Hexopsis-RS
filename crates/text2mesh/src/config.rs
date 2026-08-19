@@ -20,6 +20,8 @@ pub struct Config {
     pub sidecar: Option<PathBuf>,
     pub imaginarium_url: String,
     pub imaginarium_token: Option<String>,
+    pub meshy_url: String,
+    pub tripo_url: String,
 }
 
 impl Default for Config {
@@ -36,6 +38,8 @@ impl Default for Config {
             sidecar: None,
             imaginarium_url: "http://127.0.0.1:8791".into(),
             imaginarium_token: None,
+            meshy_url: crate::remote::MESHY_DEFAULT.into(),
+            tripo_url: crate::remote::TRIPO_DEFAULT.into(),
         }
     }
 }
@@ -84,6 +88,16 @@ impl Config {
         if let Ok(t) = std::env::var("TEXT2MESH_IMAGINARIUM_TOKEN") {
             if !t.is_empty() {
                 c.imaginarium_token = Some(t);
+            }
+        }
+        if let Ok(u) = std::env::var("TEXT2MESH_MESHY_URL") {
+            if !u.is_empty() {
+                c.meshy_url = u;
+            }
+        }
+        if let Ok(u) = std::env::var("TEXT2MESH_TRIPO_URL") {
+            if !u.is_empty() {
+                c.tripo_url = u;
             }
         }
         c

@@ -21,6 +21,8 @@
 
 - **Tests never hit live :8791.** `App::for_test` / injected `probe` skip Imaginarium health. Live estimate/generate is `TEXT2MESH_LIVE=1` only.
 
+- **Missing vendor key never POSTs.** Empty/absent `MESHY_API_KEY` / `TRIPO_API_KEY` is `not_configured` before any HTTP. 401 is only “key present but rejected.” 402 → `spend.provider_402`. 429 → `rate_limit` + `Retry-After`. Remote poll expiry is `waiting_upstream`, not local `failed`.
+
 - **Appendix B is not a clone list.** Implementers do not follow PRD Appendix B GitHub URLs.
 
 - **Hunyuan never auto.** Even with D19 gates, auto prefers colony/tripo/meshy/local.
