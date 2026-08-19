@@ -85,7 +85,16 @@ fn plan_pinned(
     }
     match p {
         PlaneId::LocalMock => Ok(choice(PlaneId::LocalMock, rewrite, degrades)),
-        PlaneId::LocalSidecar | PlaneId::LocalPreview => {
+        PlaneId::LocalSidecar => {
+            if !probe.sidecar_alive {
+                return Err(Degrade::new(
+                    error_type::NOT_CONFIGURED,
+                    "TEXT2MESH_SIDECAR is missing or not a file",
+                ));
+            }
+            Ok(choice(p, rewrite, degrades))
+        }
+        PlaneId::LocalPreview => {
             if let Some(d) = local_quality_blocker(spec, probe, quality, true) {
                 return Err(d);
             }
@@ -148,6 +157,9 @@ fn pick_local(
             ));
         }
     }
+    if probe.sidecar_alive {
+        return Ok(choice(PlaneId::LocalSidecar, rewrite, degrades));
+    }
     if let Some(d) = local_quality_blocker(spec, probe, quality, false) {
         if probe.allow_mock {
             return Ok(choice(PlaneId::LocalMock, rewrite, degrades));
@@ -178,6 +190,7 @@ fn pick_auto(
         local_quality_blocker(spec, probe, quality, false)
     };
 
+    // Auto still honours VRAM/weights. A sidecar *binary* on disk is not a 24 GB GPU.
     if local_reason.is_none() {
         return Ok(choice(PlaneId::LocalSidecar, rewrite, degrades));
     }
@@ -621,6 +634,39 @@ mod tests {
             tripo_key: true,
             keys_present: true,
             ..cpu()
+        };
+        let c = plan(&spec, &probe, &open()).unwrap();
+        assert_eq!(c.plane, PlaneId::RemoteTripo);
+    }
+
+    #[test]
+    fn local_sidecar_alive_skips_in_process_weights() {
+        // User asked local and the child exists — sidecar owns weights (D28).
+        let spec = image_spec(Quality::Standard, ComputeMode::Local);
+        let probe = ProbeSnapshot {
+            sidecar_alive: true,
+            ..cpu()
+        };
+        let c = plan(&spec, &probe, &closed()).unwrap();
+        assert_eq!(c.plane, PlaneId::LocalSidecar);
+    }
+
+    #[test]
+    fn auto_sidecar_file_does_not_bypass_vram() {
+        // Krackan-class: sidecar on PATH + 512 MiB shared must not win auto.
+        let spec = image_spec(Quality::Standard, ComputeMode::Auto);
+        let probe = ProbeSnapshot {
+            devices: vec![DeviceProbe {
+                kind: DeviceKind::GpuVulkan,
+                vram_mb: Some(512),
+                shared: true,
+                slow: true,
+            }],
+            sidecar_alive: true,
+            tripo_key: true,
+            keys_present: true,
+            disk_free_mb: 100_000,
+            ..ProbeSnapshot::default()
         };
         let c = plan(&spec, &probe, &open()).unwrap();
         assert_eq!(c.plane, PlaneId::RemoteTripo);

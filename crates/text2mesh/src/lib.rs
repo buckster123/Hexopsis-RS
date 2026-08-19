@@ -16,8 +16,11 @@ pub mod mock_glb;
 pub mod orbit;
 pub mod planner;
 pub mod router;
+pub mod sidecar;
 pub mod store;
 pub mod system_check;
+pub mod t2i;
+pub mod t2i_imaginarium;
 pub mod types;
 
 pub use compiler::{compile_view_contract, CompileOpts};

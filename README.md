@@ -11,7 +11,7 @@ Local/onboard inference <em>or</em> a networked provider, one <code>MeshJob</cod
 <img alt="license" src="https://img.shields.io/badge/license-MIT%20OR%20Apache--2.0-blue">
 <img alt="rust" src="https://img.shields.io/badge/rust-2021-orange?logo=rust&logoColor=white">
 <img alt="ci" src="https://img.shields.io/github/actions/workflow/status/buckster123/Tessera-RS/ci.yml?label=ci">
-<img alt="status" src="https://img.shields.io/badge/status-v0.1%20·%20S0-brightgreen">
+<img alt="status" src="https://img.shields.io/badge/status-v0.1%20·%20S8%2FS9-brightgreen">
 </p>
 
 </div>
@@ -48,6 +48,15 @@ text2mesh system-check --json
 # mock path (CI / Nano) — status is degraded, vertex colour, exit 1
 TEXT2MESH_ALLOW_MOCK=1 text2mesh generate --image ./photo.png \
   --compute local --provider local.mock --json
+
+# local sidecar (meshplane/1). Fixture child ships as meshplane-fixture.
+TEXT2MESH_SIDECAR=./target/release/meshplane-fixture \
+  text2mesh generate --image ./photo.png --compute local --provider local.sidecar --json
+
+# text path with Imaginarium T2I (spend gated; estimate is free)
+text2mesh estimate --prompt "a red fox wearing a yellow raincoat" --json
+TEXT2MESH_ALLOW_SPEND=1 TEXT2MESH_ALLOW_UNGATED=1 text2mesh generate \
+  --prompt "a red fox wearing a yellow raincoat" --allow-spend --json
 ```
 
 ## How it works

@@ -1,6 +1,8 @@
-//! Job director: validate → persist queued → plan → mock / confirm / honest fail.
+//! Job director: validate → persist queued → plan → mock / sidecar / confirm / honest fail.
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
+use std::sync::atomic::AtomicBool;
+use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use crate::compiler::{compile_view_contract, CompileOpts};
@@ -8,18 +10,29 @@ use crate::error::{error_type, Error};
 use crate::gates::score_g3_g4;
 use crate::hash::sha256_bytes;
 use crate::mock_glb::{emit_mock_glb_seeded, has_vertex_color};
-use crate::orbit::{decode_png, mock_view_png};
+use crate::orbit::decode_png;
 use crate::planner::plan;
 use crate::router::{route_job, RouteDecision};
+use crate::sidecar::{run_sidecar, sidecar_bin_from_env, SidecarCfg};
 use crate::store::Store;
 use crate::system_check::{estimate as estimate_job, probe_from_env};
+use crate::t2i::{estimate_orbit, synthesize_orbit, view_count, MockT2i, T2iProvider};
+use crate::t2i_imaginarium::Imaginarium;
 use crate::types::{
     ArtifactKind, Estimate, JobStatus, JobSubmit, Manifest, ManifestHashes, MaterialMode, MeshJob,
-    PlaneId, ProbeSnapshot, SpendPolicy, T2iProviderId, Timings, WaitResult, MANIFEST_SCHEMA,
-    WAIT_MAX_S, WAIT_MIN_S,
+    PlaneId, ProbeSnapshot, SpendPolicy, Synthesis, T2iProviderId, Timings, WaitResult,
+    MANIFEST_SCHEMA, WAIT_MAX_S, WAIT_MIN_S,
 };
 
 const MAX_UPLOAD_BYTES: u64 = 32 * 1024 * 1024;
+
+struct FinishGlb<'a> {
+    engine: &'a str,
+    plane: PlaneId,
+    disclaimer: Option<&'a str>,
+    sidecar_protocol: Option<&'a str>,
+    synthesis: Option<Synthesis>,
+}
 
 pub struct App {
     pub store: Store,
@@ -28,6 +41,10 @@ pub struct App {
     pub allow_ungated: bool,
     /// Injected probe (tests). None → env probe.
     probe: Option<ProbeSnapshot>,
+    t2i: Option<Box<dyn T2iProvider>>,
+    sidecar_bin: Option<PathBuf>,
+    sidecar_cancel_grace: Duration,
+    cancel: Arc<AtomicBool>,
 }
 
 impl App {
@@ -38,6 +55,10 @@ impl App {
             allow_spend: false,
             allow_ungated: false,
             probe: None,
+            t2i: None,
+            sidecar_bin: sidecar_bin_from_env(),
+            sidecar_cancel_grace: Duration::from_secs(30),
+            cancel: Arc::new(AtomicBool::new(false)),
         }
     }
 
@@ -49,6 +70,10 @@ impl App {
             allow_spend: cfg.allow_spend,
             allow_ungated: cfg.allow_ungated,
             probe: None,
+            t2i: None,
+            sidecar_bin: cfg.sidecar.or_else(sidecar_bin_from_env),
+            sidecar_cancel_grace: Duration::from_secs(30),
+            cancel: Arc::new(AtomicBool::new(false)),
         })
     }
 
@@ -59,12 +84,34 @@ impl App {
             allow_spend: false,
             allow_ungated: true,
             probe: Some(ProbeSnapshot::cpu_only(allow_mock)),
+            t2i: None,
+            sidecar_bin: None,
+            sidecar_cancel_grace: Duration::from_millis(100),
+            cancel: Arc::new(AtomicBool::new(false)),
         }
     }
 
     pub fn with_probe(mut self, probe: ProbeSnapshot) -> Self {
         self.probe = Some(probe);
         self
+    }
+
+    pub fn with_t2i(mut self, t2i: Box<dyn T2iProvider>) -> Self {
+        self.t2i = Some(t2i);
+        self
+    }
+
+    pub fn with_sidecar(mut self, bin: PathBuf) -> Self {
+        self.sidecar_bin = Some(bin);
+        self
+    }
+
+    pub fn cancel_flag(&self) -> Arc<AtomicBool> {
+        self.cancel.clone()
+    }
+
+    fn is_test(&self) -> bool {
+        self.probe.is_some()
     }
 
     pub fn probe(&self) -> ProbeSnapshot {
@@ -222,44 +269,70 @@ impl App {
                 if let Some(q) = choice.quality_rewrite {
                     job.quality = q;
                 }
-                if choice.plane == PlaneId::LocalMock {
-                    let job = if spec.prompt.as_deref().is_some_and(|s| !s.trim().is_empty()) {
-                        self.synthesize_text(job, spec)?
-                    } else {
-                        job
-                    };
-                    if job.status == JobStatus::Failed {
-                        return Ok(job);
-                    }
-                    self.run_mock(job, spec)
+                let job = if spec.prompt.as_deref().is_some_and(|s| !s.trim().is_empty()) {
+                    self.synthesize_text(job, spec, choice.plane)?
                 } else {
-                    self.fail(
+                    job
+                };
+                if job.status.is_terminal() || job.status == JobStatus::NeedsConfirm {
+                    return Ok(job);
+                }
+                match choice.plane {
+                    PlaneId::LocalMock => self.run_mock(job, spec),
+                    PlaneId::LocalSidecar => self.run_sidecar_plane(job, spec),
+                    other => self.fail(
                         job,
                         Error::new(
                             error_type::NOT_CONFIGURED,
                             format!(
-                                "plane {} is not wired in S0–S4 (sidecar/remote adapters later)",
-                                choice.plane.as_str()
+                                "plane {} is not wired (remote adapters are S10)",
+                                other.as_str()
                             ),
                         )
                         .with_hint(
-                            "use --compute local --provider local.mock, or TEXT2MESH_ALLOW_MOCK=1",
+                            "use --compute local --provider local.mock or TEXT2MESH_SIDECAR",
                         ),
-                    )
+                    ),
                 }
             }
         }
     }
 
-    fn synthesize_text(&self, mut job: MeshJob, spec: &JobSubmit) -> Result<MeshJob, Error> {
+    fn wants_paid_t2i(&self, plane: PlaneId) -> bool {
+        if let Some(p) = &self.t2i {
+            return p.id() == T2iProviderId::Imaginarium;
+        }
+        if self.is_test() {
+            return false;
+        }
+        plane != PlaneId::LocalMock && Imaginarium::from_env().is_some_and(|i| i.health())
+    }
+
+    fn paid_provider(&self) -> Result<Imaginarium, Error> {
+        Imaginarium::from_env()
+            .ok_or_else(|| Error::new(error_type::T2I_UNAVAILABLE, "Imaginarium is not configured"))
+    }
+
+    fn synthesize_text(
+        &self,
+        mut job: MeshJob,
+        spec: &JobSubmit,
+        plane: PlaneId,
+    ) -> Result<MeshJob, Error> {
         let prompt = spec.prompt.as_deref().unwrap_or("").trim();
+        let paid = self.wants_paid_t2i(plane);
+        let t2i_id = if paid {
+            T2iProviderId::Imaginarium
+        } else {
+            T2iProviderId::Mock
+        };
         let contract = compile_view_contract(
             prompt,
             CompileOpts {
                 quality: spec.quality,
                 camera_preset: spec.camera_preset,
                 family_seed: spec.seed.unwrap_or(42),
-                t2i_provider: T2iProviderId::Mock,
+                t2i_provider: t2i_id,
             },
         )?;
         job.input.contract_id = Some(contract.contract_id.clone());
@@ -269,13 +342,98 @@ impl App {
             .write_artifact(&job.id, "contract.json", &bytes)?;
         job.artifacts.contract = Some(cpath.to_string_lossy().into_owned());
 
+        if paid {
+            let n_views = view_count(spec.quality);
+            let cost = {
+                let got = if let Some(p) = &self.t2i {
+                    estimate_orbit(p.as_ref(), n_views)
+                } else {
+                    match self.paid_provider() {
+                        Ok(im) => estimate_orbit(&im, n_views),
+                        Err(e) => return self.fail(job, e),
+                    }
+                };
+                match got {
+                    Ok(c) => c,
+                    Err(e) => return self.fail(job, e),
+                }
+            };
+            job.spend.estimated_usd = Some(cost.usd);
+            job.spend.usd_uncertain = cost.usd_uncertain;
+            if cost.usd > 0.0 && !self.spend_policy(spec).allow_spend {
+                job.status = JobStatus::NeedsConfirm;
+                job.error = Some(
+                    Error::new(
+                        error_type::SPEND_GATED,
+                        format!("t2i estimate usd={} > 0 and allow_spend is false", cost.usd),
+                    )
+                    .with_hint("call estimate, then resubmit with --allow-spend"),
+                );
+                job.touch();
+                self.store.update(&job)?;
+                return Ok(job);
+            }
+            if cost.usd > self.spend_policy(spec).max_usd {
+                return self.fail(
+                    job,
+                    Error::new(
+                        error_type::SPEND_ESTIMATE_EXCEEDED,
+                        format!(
+                            "t2i estimate usd={} exceeds max_usd={}",
+                            cost.usd,
+                            self.spend_policy(spec).max_usd
+                        ),
+                    ),
+                );
+            }
+        } else if plane != PlaneId::LocalMock && !self.allow_mock {
+            return self.fail(
+                job,
+                Error::new(
+                    error_type::T2I_UNAVAILABLE,
+                    "no live T2I provider (Imaginarium) and mock T2I is not allowed",
+                )
+                .with_hint("TEXT2MESH_ALLOW_SPEND=1 with Imaginarium, or TEXT2MESH_ALLOW_MOCK=1"),
+            );
+        }
+
+        job.status = JobStatus::Running;
+        job.stage = Some("t2i".into());
+        job.touch();
+        self.store.update(&job)?;
+
+        let orbit = if let Some(p) = &self.t2i {
+            synthesize_orbit(p.as_ref(), &contract)?
+        } else if paid {
+            synthesize_orbit(&self.paid_provider()?, &contract)?
+        } else {
+            synthesize_orbit(&MockT2i, &contract)?
+        };
+        if orbit.independent_t2i {
+            job.degrades.push("t2i.i2i".into());
+        }
+        job.spend.actual_usd = Some(job.spend.actual_usd.unwrap_or(0.0) + orbit.usd);
+
         let mut decoded = Vec::new();
-        for cam in &contract.camera_ring.cameras {
-            let png = mock_view_png(&contract, &cam.id)?;
-            let rel = format!("views/{}.png", cam.id);
-            let p = self.store.write_artifact(&job.id, &rel, &png)?;
+        for (cam_id, png) in &orbit.views {
+            let rel = format!("views/{cam_id}.png");
+            let p = self.store.write_artifact(&job.id, &rel, png)?;
             job.artifacts.views.push(p.to_string_lossy().into_owned());
-            decoded.push((cam.id.clone(), decode_png(&png)?));
+            decoded.push((cam_id.clone(), decode_png(png)?));
+        }
+
+        let canonical = contract.subject_lock.canonical_view_id.clone();
+        if let Some((_, png)) = orbit
+            .views
+            .iter()
+            .find(|(id, _)| *id == canonical)
+            .or_else(|| orbit.views.first())
+        {
+            let dest = self
+                .store
+                .write_artifact(&job.id, "input/conditioned.png", png)?;
+            job.input.image_hash_conditioned = Some(sha256_bytes(png));
+            let _ = dest;
         }
 
         if !self.allow_ungated {
@@ -326,26 +484,139 @@ impl App {
             input.extend_from_slice(h.as_bytes());
         }
         let glb = emit_mock_glb_seeded(&input, spec.seed.unwrap_or(0));
-        if !has_vertex_color(&glb) {
+        self.finish_glb(
+            job,
+            &glb,
+            FinishGlb {
+                engine: "mock",
+                plane: PlaneId::LocalMock,
+                disclaimer: Some("not-a-model"),
+                sidecar_protocol: None,
+                synthesis: Some(Synthesis::HeroOrbit),
+            },
+        )
+    }
+
+    fn run_sidecar_plane(&self, mut job: MeshJob, spec: &JobSubmit) -> Result<MeshJob, Error> {
+        if job.cancel_requested || self.cancel.load(std::sync::atomic::Ordering::SeqCst) {
+            job.status = JobStatus::Cancelled;
+            job.touch();
+            self.store.update(&job)?;
+            return Ok(job);
+        }
+        let bin = self.sidecar_bin.clone().or_else(sidecar_bin_from_env);
+        let Some(bin) = bin else {
+            return self.fail(
+                job,
+                Error::new(error_type::NOT_CONFIGURED, "TEXT2MESH_SIDECAR is missing")
+                    .with_hint("point TEXT2MESH_SIDECAR at a meshplane/1 binary"),
+            );
+        };
+        let job_dir = self.store.job_dir(&job.id)?;
+        let conditioned = self.ensure_conditioned(&job)?;
+        job.status = JobStatus::Running;
+        job.stage = Some("form".into());
+        job.pct = 40;
+        job.touch();
+        self.store.update(&job)?;
+
+        let wall = Duration::from_secs(spec.max_wall_s.max(WAIT_MIN_S));
+        let cfg = SidecarCfg {
+            wall,
+            handshake: Duration::from_secs(30),
+            cancel_grace: self.sidecar_cancel_grace,
+            cancel: Some(self.cancel.clone()),
+            args: Vec::new(),
+        };
+        let result = match run_sidecar(&bin, &job.id, spec, &job_dir, &conditioned, cfg) {
+            Ok(r) => r,
+            Err(e) if e.error_type == error_type::CANCELLED => {
+                job.status = JobStatus::Cancelled;
+                job.error = Some(e);
+                job.touch();
+                self.store.update(&job)?;
+                return Ok(job);
+            }
+            Err(e) => return self.fail(job, e),
+        };
+        self.finish_glb(
+            job,
+            &result.glb,
+            FinishGlb {
+                engine: &result.engine,
+                plane: PlaneId::LocalSidecar,
+                disclaimer: None,
+                sidecar_protocol: Some("meshplane/1"),
+                synthesis: Some(Synthesis::HeroOrbit),
+            },
+        )
+    }
+
+    fn ensure_conditioned(&self, job: &MeshJob) -> Result<PathBuf, Error> {
+        let p = self.store.artifact_path(&job.id, "input/conditioned.png");
+        if p.is_file() {
+            return Ok(p);
+        }
+        let hero = job
+            .artifacts
+            .views
+            .iter()
+            .find(|v| v.ends_with("hero.png"))
+            .or_else(|| {
+                job.artifacts
+                    .views
+                    .iter()
+                    .find(|v| v.ends_with("front.png"))
+            })
+            .or_else(|| job.artifacts.views.first());
+        if let Some(v) = hero {
+            let bytes = std::fs::read(v)?;
+            return self
+                .store
+                .write_artifact(&job.id, "input/conditioned.png", &bytes);
+        }
+        Err(Error::new(
+            error_type::NOT_CONFIGURED,
+            "sidecar needs input/conditioned.png (image or a synthesized hero view)",
+        ))
+    }
+
+    fn finish_glb(
+        &self,
+        mut job: MeshJob,
+        glb: &[u8],
+        meta: FinishGlb<'_>,
+    ) -> Result<MeshJob, Error> {
+        if !has_vertex_color(glb) {
             return self.fail(
                 job,
                 Error::new(
                     error_type::EXPORT_MATERIALS_MISSING,
-                    "mock GLB missing COLOR_0",
+                    "GLB missing COLOR_0 and has no PBR textures",
                 ),
             );
         }
-        let hash = sha256_bytes(&glb);
-        let glb_path = self.store.write_artifact(&job.id, "artifact.glb", &glb)?;
+        let hash = sha256_bytes(glb);
+        let glb_path = self.store.write_artifact(&job.id, "artifact.glb", glb)?;
         self.store
             .write_artifact(&job.id, "artifact.glb.sha256", hash.as_bytes())?;
 
         job.status = JobStatus::Degraded;
         job.pct = 100;
         job.stage = Some("export".into());
-        job.degrades.push(error_type::EXPORT_MATERIAL_MODE.into());
-        job.spend.actual_usd = Some(0.0);
-        job.spend.estimated_usd = Some(0.0);
+        if !job
+            .degrades
+            .iter()
+            .any(|d| d == error_type::EXPORT_MATERIAL_MODE)
+        {
+            job.degrades.push(error_type::EXPORT_MATERIAL_MODE.into());
+        }
+        if job.spend.actual_usd.is_none() {
+            job.spend.actual_usd = Some(0.0);
+        }
+        if job.spend.estimated_usd.is_none() {
+            job.spend.estimated_usd = Some(job.spend.actual_usd.unwrap_or(0.0));
+        }
         job.artifacts.glb = Some(glb_path.to_string_lossy().into_owned());
         job.error = None;
 
@@ -354,14 +625,14 @@ impl App {
             job_id: job.id.clone(),
             ok: false,
             status: JobStatus::Degraded,
-            plane: Some(PlaneId::LocalMock),
-            engine: Some("mock".into()),
-            disclaimer: Some("not-a-model".into()),
+            plane: Some(meta.plane),
+            engine: Some(meta.engine.into()),
+            disclaimer: meta.disclaimer.map(str::to_string),
             material_mode: Some(MaterialMode::VertexColor),
             hashes: ManifestHashes {
                 glb: Some(hash),
                 job: None,
-                contract: None,
+                contract: job.input.contract_id.clone(),
             },
             degrades: job.degrades.clone(),
             spend: job.spend.clone(),
@@ -370,7 +641,13 @@ impl App {
                 total_ms: Some(1),
                 queue_ms: None,
             },
-            quality: Some(crate::types::Quality::Preview),
+            quality: Some(if meta.plane == PlaneId::LocalMock {
+                crate::types::Quality::Preview
+            } else {
+                job.quality
+            }),
+            sidecar_protocol: meta.sidecar_protocol.map(str::to_string),
+            synthesis: meta.synthesis,
         };
         let man_bytes = serde_json::to_vec_pretty(&manifest)?;
         let man_path = self
@@ -466,6 +743,7 @@ impl App {
         if job.status.is_terminal() {
             return Ok(job);
         }
+        self.cancel.store(true, std::sync::atomic::Ordering::SeqCst);
         job.cancel_requested = true;
         if job.plane == Some(PlaneId::LocalMock)
             || job.status == JobStatus::Queued
@@ -560,7 +838,39 @@ impl App {
     }
 
     pub fn estimate(&self, spec: &JobSubmit) -> Estimate {
-        estimate_job(spec, &self.probe(), &self.spend_policy(spec))
+        let mut est = estimate_job(spec, &self.probe(), &self.spend_policy(spec));
+        let text = spec.prompt.as_deref().is_some_and(|s| !s.trim().is_empty());
+        if !text {
+            return est;
+        }
+        let n_views = view_count(spec.quality);
+        if let Some(p) = &self.t2i {
+            if let Ok(c) = estimate_orbit(p.as_ref(), n_views) {
+                est.usd += c.usd;
+                est.usd_uncertain = est.usd_uncertain || c.usd_uncertain;
+                est.breakdown.push(crate::types::EstimateStep {
+                    step: "t2i.orbit".into(),
+                    usd: c.usd,
+                    n: n_views,
+                });
+            }
+        } else if !self.is_test() {
+            if let Some(im) = Imaginarium::from_env() {
+                match estimate_orbit(&im, n_views) {
+                    Ok(c) => {
+                        est.usd += c.usd;
+                        est.usd_uncertain = est.usd_uncertain || c.usd_uncertain;
+                        est.breakdown.push(crate::types::EstimateStep {
+                            step: "t2i.orbit".into(),
+                            usd: c.usd,
+                            n: n_views,
+                        });
+                    }
+                    Err(_) => est.usd_uncertain = true,
+                }
+            }
+        }
+        est
     }
 
     pub fn watchdog_tick(&self) -> Result<Vec<String>, Error> {
@@ -602,7 +912,7 @@ pub fn compile_prompt(prompt: &str, spec: &JobSubmit) -> Result<crate::ViewContr
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::types::{ComputeMode, JobSubmit, Quality};
+    use crate::types::{ComputeMode, JobSubmit, PlaneId, ProbeSnapshot, Quality};
 
     #[test]
     fn text_prompt_ungated_mock_degraded() {
@@ -767,5 +1077,77 @@ mod tests {
         let got = app.status(&job.id).unwrap();
         assert_eq!(got.status, JobStatus::Failed);
         assert_eq!(got.error.unwrap().error_type, "wait.timeout");
+    }
+
+    #[test]
+    fn imaginarium_estimate_then_fire_mock_mesh() {
+        let (base, h) = crate::t2i_imaginarium::tests::serve_fake();
+        let im = crate::t2i_imaginarium::Imaginarium::new(base, Some("tok".into())).unwrap();
+        let mut app = App::for_test(true).with_t2i(Box::new(im));
+        app.allow_spend = true;
+        let job = app
+            .submit(JobSubmit {
+                prompt: Some("a red fox wearing a yellow raincoat".into()),
+                compute: ComputeMode::Local,
+                provider: Some(PlaneId::LocalMock),
+                quality: Quality::Preview,
+                allow_spend: true,
+                ..JobSubmit::default()
+            })
+            .unwrap();
+        assert_eq!(job.status, JobStatus::Degraded);
+        assert!(job.artifacts.contract.is_some());
+        assert_eq!(job.artifacts.views.len(), 4);
+        assert!(job.spend.estimated_usd.unwrap_or(0.0) > 0.0);
+        drop(h);
+    }
+
+    #[test]
+    fn imaginarium_spend_gated_needs_confirm() {
+        let (base, h) = crate::t2i_imaginarium::tests::serve_fake();
+        let im = crate::t2i_imaginarium::Imaginarium::new(base, Some("tok".into())).unwrap();
+        let app = App::for_test(false)
+            .with_t2i(Box::new(im))
+            .with_probe(ProbeSnapshot {
+                sidecar_alive: true,
+                allow_mock: false,
+                ..ProbeSnapshot::cpu_only(false)
+            })
+            .with_sidecar(std::path::PathBuf::from("/bin/true"));
+        let job = app
+            .submit(JobSubmit {
+                prompt: Some("a red fox wearing a yellow raincoat".into()),
+                compute: ComputeMode::Local,
+                provider: Some(PlaneId::LocalSidecar),
+                quality: Quality::Preview,
+                allow_spend: false,
+                ..JobSubmit::default()
+            })
+            .unwrap();
+        assert_eq!(job.status, JobStatus::NeedsConfirm);
+        assert_eq!(
+            job.error.as_ref().unwrap().error_type,
+            error_type::SPEND_GATED
+        );
+        drop(h);
+    }
+
+    #[test]
+    fn sidecar_text_without_t2i_unavailable() {
+        let app = App::for_test(false).with_probe(ProbeSnapshot {
+            sidecar_alive: true,
+            allow_mock: false,
+            ..ProbeSnapshot::cpu_only(false)
+        });
+        let job = app
+            .submit(JobSubmit {
+                prompt: Some("a red fox".into()),
+                compute: ComputeMode::Local,
+                provider: Some(PlaneId::LocalSidecar),
+                ..JobSubmit::default()
+            })
+            .unwrap();
+        assert_eq!(job.status, JobStatus::Failed);
+        assert_eq!(job.error.unwrap().error_type, error_type::T2I_UNAVAILABLE);
     }
 }

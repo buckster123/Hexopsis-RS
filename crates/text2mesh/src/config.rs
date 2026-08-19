@@ -17,6 +17,9 @@ pub struct Config {
     pub max_usd_per_job: f64,
     pub max_usd_per_day: f64,
     pub token: Option<String>,
+    pub sidecar: Option<PathBuf>,
+    pub imaginarium_url: String,
+    pub imaginarium_token: Option<String>,
 }
 
 impl Default for Config {
@@ -30,6 +33,9 @@ impl Default for Config {
             max_usd_per_job: 2.0,
             max_usd_per_day: 10.0,
             token: None,
+            sidecar: None,
+            imaginarium_url: "http://127.0.0.1:8791".into(),
+            imaginarium_token: None,
         }
     }
 }
@@ -63,6 +69,21 @@ impl Config {
         if let Ok(t) = std::env::var("TEXT2MESH_TOKEN") {
             if !t.is_empty() {
                 c.token = Some(t);
+            }
+        }
+        if let Ok(p) = std::env::var("TEXT2MESH_SIDECAR") {
+            if !p.is_empty() {
+                c.sidecar = Some(PathBuf::from(p));
+            }
+        }
+        if let Ok(u) = std::env::var("TEXT2MESH_IMAGINARIUM_URL") {
+            if !u.is_empty() {
+                c.imaginarium_url = u;
+            }
+        }
+        if let Ok(t) = std::env::var("TEXT2MESH_IMAGINARIUM_TOKEN") {
+            if !t.is_empty() {
+                c.imaginarium_token = Some(t);
             }
         }
         c

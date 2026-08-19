@@ -653,6 +653,10 @@ pub struct Manifest {
     pub timings: Timings,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub quality: Option<Quality>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub sidecar_protocol: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub synthesis: Option<Synthesis>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

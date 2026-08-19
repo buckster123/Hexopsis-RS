@@ -15,6 +15,12 @@
 
 - **No `XAI_API_KEY` in this process.** Imaginarium holds the Imagine key.
 
+- **Paid T2I is estimate-then-fire.** `T2iProvider::estimate` always runs first (OQ-9). Do not hardcode 2× I2I. Closed spend gate → `needs_confirm`, never a silent POST. Edit sources are `library:{id}` or data-URLs — no bare filesystem paths.
+
+- **Sidecar paths stay in the job dir.** `meshplane/1` artifact paths must canonicalize under `jobs/<id>/`. Escape → `engine.crash`. Handshake miss (30 s) → `not_configured`. Protocol mismatch → `unsupported`. Exit ≠ 0 → `engine.crash`. Auto never picks a sidecar binary as a substitute for VRAM.
+
+- **Tests never hit live :8791.** `App::for_test` / injected `probe` skip Imaginarium health. Live estimate/generate is `TEXT2MESH_LIVE=1` only.
+
 - **Appendix B is not a clone list.** Implementers do not follow PRD Appendix B GitHub URLs.
 
 - **Hunyuan never auto.** Even with D19 gates, auto prefers colony/tripo/meshy/local.
