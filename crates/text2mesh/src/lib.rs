@@ -15,6 +15,7 @@ pub mod mcp_schema;
 pub mod mock_glb;
 pub mod orbit;
 pub mod planner;
+pub mod router;
 pub mod store;
 pub mod system_check;
 pub mod types;

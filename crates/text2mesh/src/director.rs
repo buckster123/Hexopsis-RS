@@ -10,6 +10,7 @@ use crate::hash::sha256_bytes;
 use crate::mock_glb::{emit_mock_glb_seeded, has_vertex_color};
 use crate::orbit::{decode_png, mock_view_png};
 use crate::planner::plan;
+use crate::router::{route_job, RouteDecision};
 use crate::store::Store;
 use crate::system_check::{estimate as estimate_job, probe_from_env};
 use crate::types::{
@@ -138,6 +139,29 @@ impl App {
         let mut job = MeshJob::from_submit(id, &spec);
         job.allow_spend = spec.allow_spend || self.allow_spend;
         self.store.create(&job)?;
+
+        match route_job(&spec) {
+            RouteDecision::Analytic => {
+                return self.fail(
+                    job,
+                    Error::new(
+                        error_type::ANALYTIC_UNAVAILABLE,
+                        "Cadre is not configured (set TEXT2MESH_CADRE_URL or TEXT2MESH_CADRE_BIN)",
+                    )
+                    .with_hint("dimensioned prompts stay on Cadre; pass --allow-neural-cad to force View Contract"),
+                );
+            }
+            RouteDecision::Native => {
+                return self.fail(
+                    job,
+                    Error::new(
+                        error_type::NOT_CONFIGURED,
+                        "native text-3D is opt-in and no native plane is wired in S7",
+                    ),
+                );
+            }
+            RouteDecision::Image | RouteDecision::ViewContract => {}
+        }
 
         if let Some(path) = spec.image_path.as_deref() {
             let p = Path::new(path);
@@ -596,6 +620,24 @@ mod tests {
         assert!(job.artifacts.contract.is_some());
         assert_eq!(job.artifacts.views.len(), 4);
         assert!(job.degrades.iter().any(|d| d == "gate.encoder_missing"));
+    }
+
+    #[test]
+    fn analytic_without_cadre_refuses() {
+        let app = App::for_test(true);
+        let job = app
+            .submit(JobSubmit {
+                prompt: Some("box 20x10x5 mm".into()),
+                compute: ComputeMode::Local,
+                provider: Some(PlaneId::LocalMock),
+                ..JobSubmit::default()
+            })
+            .unwrap();
+        assert_eq!(job.status, JobStatus::Failed);
+        assert_eq!(
+            job.error.as_ref().unwrap().error_type,
+            error_type::ANALYTIC_UNAVAILABLE
+        );
     }
 
     fn write_dot() -> (tempfile::TempDir, std::path::PathBuf) {
