@@ -11,6 +11,7 @@ use crate::types::{rfc3339_to_unix, JobStatus, MeshJob};
 
 const QUEUE_STALE_S: u64 = 60;
 const CONFIRM_TTL_S: u64 = 86_400;
+const RECOVER_TTL_S: u64 = 86_400;
 
 pub struct Store {
     root: PathBuf,
@@ -298,6 +299,26 @@ impl Store {
                     ));
                     change = true;
                 }
+                JobStatus::Submitted | JobStatus::Running
+                    if job.plane.map(|p| p.is_remote()).unwrap_or(false)
+                        && job.upstream_id.is_some()
+                        && age > job.budget.max_wall_s.max(crate::types::WAIT_MIN_S) =>
+                {
+                    job.status = JobStatus::WaitingUpstream;
+                    job.error = Some(Error::new(
+                        error_type::WAIT_TIMEOUT,
+                        "remote poll window expired; upstream_id retained",
+                    ));
+                    change = true;
+                }
+                JobStatus::WaitingUpstream if age > RECOVER_TTL_S => {
+                    job.status = JobStatus::Failed;
+                    job.error = Some(Error::new(
+                        error_type::WAIT_TIMEOUT,
+                        "waiting_upstream older than recover_ttl",
+                    ));
+                    change = true;
+                }
                 _ => {}
             }
             if change {
@@ -400,5 +421,22 @@ mod tests {
         let got = store.get(&job.id).unwrap().unwrap();
         assert_eq!(got.status, JobStatus::Failed);
         assert_eq!(got.error.unwrap().error_type, "engine.interrupted");
+    }
+
+    #[test]
+    fn wait_timeout_remote_goes_waiting_upstream() {
+        let store = Store::ephemeral().unwrap();
+        let mut job = sample_job(&store, "01TESTREMOTE000000000000");
+        job.status = JobStatus::Submitted;
+        job.plane = Some(crate::types::PlaneId::RemoteTripo);
+        job.upstream_id = Some("task_tripo_1".into());
+        job.created_at = "2000-01-01T00:00:00Z".into();
+        job.budget.max_wall_s = 30;
+        store.update(&job).unwrap();
+        store.watchdog_tick(1_800_000_000).unwrap();
+        let got = store.get(&job.id).unwrap().unwrap();
+        assert_eq!(got.status, JobStatus::WaitingUpstream);
+        assert_eq!(got.upstream_id.as_deref(), Some("task_tripo_1"));
+        assert_eq!(got.error.unwrap().error_type, "wait.timeout");
     }
 }

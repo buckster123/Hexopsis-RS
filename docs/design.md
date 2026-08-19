@@ -2,7 +2,7 @@
 
 | Field | Value |
 |---|---|
-| **Status** | v0.4 — implement from this (S8/S9: Imaginarium T2I + meshplane/1) |
+| **Status** | v0.4 — implement from this (S10: Meshy/Tripo remotes) |
 | **Date** | 2026-08-19 |
 | **Wins over** | informal chat, research notes |
 | **Loses to** | CHARTER D1–D30 |
@@ -1173,6 +1173,29 @@ Probe: `GET {TEXT2MESH_CADRE_URL}/v1/health` or `cadre --version` if `TEXT2MESH_
 
 Poll vs sync: if they return a job id, poll their status with **job** timeouts (≥30 s). 5 s probe is only health. Missing both URL and bin → `analytic.unavailable`.
 
+### 19.3 Meshy / Tripo wire (public routes only)
+
+v1 director is **blocking**. Tests inject loopback fixtures. Live POSTs require a present key **and** `allow_spend`. Missing key → `not_configured` **before** any POST (never a 401 for absence). Live tests skip unless `TEXT2MESH_LIVE=1`.
+
+**Meshy** (`TEXT2MESH_MESHY_URL` default `https://api.meshy.ai`, key `MESHY_API_KEY`):
+
+| Our op | Their route | We send | We read |
+|---|---|---|---|
+| image | `POST /openapi/v1/image-to-3d` | `image_url` data-URI + `target_formats=["glb"]` | `result` task id |
+| native text (`allow_native_text`) | `POST /openapi/v2/text-to-3d` | `{mode:preview, prompt}` | `result` |
+| poll | `GET …/{id}` | — | `status` `PENDING\|IN_PROGRESS\|SUCCEEDED\|FAILED\|CANCELED`; `model_urls.glb` |
+
+**Tripo** (`TEXT2MESH_TRIPO_URL` default `https://openapi.tripo3d.ai/v3`, key `TRIPO_API_KEY`):
+
+| Our op | Their route | We send | We read |
+|---|---|---|---|
+| image | `POST /generation/image-to-model` | `file.type=data_url` | `data.task_id` |
+| native text | `POST /generation/text-to-model` | `{prompt, model}` | `data.task_id` |
+| multiview (cardinals) | `POST /generation/multiview-to-model` | named `front,left,back,right` | `data.task_id` |
+| poll | `GET /tasks/{id}` | — | `status=success\|failed\|…`; `output.model_url` |
+
+HTTP: **402** → `spend.provider_402` (job `failed`); **429** → `rate_limit` + `Retry-After` hint (no silent retry loop). Poll window expiry with `upstream_id` → `waiting_upstream`. Fixture GLB is the mock vertex-colour mesh → `degraded` `export.material_mode`. Hunyuan stays inert.
+
 ---
 
 ## 20. Image preprocess
@@ -1217,6 +1240,8 @@ Pure.
 | `TEXT2MESH_MAX_USD_PER_DAY` | `10.0` | |
 | `TEXT2MESH_SIDECAR` | unset | `meshplane/1` binary |
 | `TEXT2MESH_IMAGINARIUM_URL` | `http://127.0.0.1:8791` | compose |
+| `TEXT2MESH_MESHY_URL` | `https://api.meshy.ai` | public Meshy base |
+| `TEXT2MESH_TRIPO_URL` | `https://openapi.tripo3d.ai/v3` | public Tripo v3 base |
 | `TEXT2MESH_CADRE_URL` | unset | e.g. `http://127.0.0.1:7410` |
 | `TEXT2MESH_CADRE_BIN` | unset | `cadre` on PATH if set empty-and-found |
 | `TEXT2MESH_IDLE_UNLOAD_S` | `120` | |

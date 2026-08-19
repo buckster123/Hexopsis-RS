@@ -11,7 +11,7 @@ Local/onboard inference <em>or</em> a networked provider, one <code>MeshJob</cod
 <img alt="license" src="https://img.shields.io/badge/license-MIT%20OR%20Apache--2.0-blue">
 <img alt="rust" src="https://img.shields.io/badge/rust-2021-orange?logo=rust&logoColor=white">
 <img alt="ci" src="https://img.shields.io/github/actions/workflow/status/buckster123/Tessera-RS/ci.yml?label=ci">
-<img alt="status" src="https://img.shields.io/badge/status-v0.1%20·%20S8%2FS9-brightgreen">
+<img alt="status" src="https://img.shields.io/badge/status-v0.1%20·%20S10-brightgreen">
 </p>
 
 </div>
@@ -57,6 +57,10 @@ TEXT2MESH_SIDECAR=./target/release/meshplane-fixture \
 text2mesh estimate --prompt "a red fox wearing a yellow raincoat" --json
 TEXT2MESH_ALLOW_SPEND=1 TEXT2MESH_ALLOW_UNGATED=1 text2mesh generate \
   --prompt "a red fox wearing a yellow raincoat" --allow-spend --json
+
+# remote (Meshy / Tripo) — spend gated; fixtures in CI; live needs a real key
+TEXT2MESH_ALLOW_SPEND=1 text2mesh generate --image ./photo.png \
+  --compute remote --provider remote.tripo --allow-spend --json
 ```
 
 ## How it works
